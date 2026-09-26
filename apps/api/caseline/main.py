@@ -6,22 +6,35 @@ from collections.abc import Callable
 from datetime import datetime
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from caseline import crypto
 from caseline.config import Settings, get_settings
 from caseline.db import Database
+from caseline.middleware import RateLimitMiddleware, RequestIdMiddleware
 from caseline.models import utcnow
-from caseline.routers import admin, calls, health, intake, referrals
+from caseline.routers import admin, calls, health, intake, operations, referrals
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None,
                clock: Callable[[], datetime] | None = None) -> FastAPI:
     settings = settings or get_settings()
-    app = FastAPI(title="CaseLine API", version="0.1.0",
+    crypto.configure(settings.caseline_field_encryption_key.get_secret_value()
+                     if settings.caseline_field_encryption_key else None)
+    app = FastAPI(title="CaseLine API", version="0.2.0",
                   description="Intake/referral backend. Guava is the only telephony/SMS provider.")
     app.state.settings = settings
     app.state.database = database or Database(settings.database_url)
     app.state.clock = clock or utcnow
-    for r in (health.router, intake.router, referrals.router, calls.router, admin.router):
+    app.add_middleware(RateLimitMiddleware, per_minute=settings.rate_limit_per_minute,
+                       report_links_per_minute=settings.report_link_rate_limit_per_minute)
+    origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
+    if origins:
+        app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", "POST", "PATCH"],
+                           allow_headers=["Authorization", "Content-Type", "Idempotency-Key"])
+    app.add_middleware(RequestIdMiddleware)
+    for r in (health.router, intake.router, referrals.router, calls.router, admin.router, operations.router,
+              operations.public):
         app.include_router(r)
     return app
 

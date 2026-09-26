@@ -21,7 +21,7 @@ from caseline.config import APPROVED_DEMO_NUMBERS, Settings, get_settings
 from caseline.enums import CaseStatus, ConsentPurpose, JobType, NotificationStatus, ReferralStatus
 from caseline.models import Caller, Case, Notification, Referral, utcnow
 from caseline.providers import Gateways, build_gateways
-from caseline.services import consent
+from caseline.services import consent, reports, sweeps
 from caseline.services.lifecycle import set_case_status, set_referral_status
 from caseline.services.notifications import render
 
@@ -54,9 +54,17 @@ def _send_sms(session: Session, n: Notification, case: Case, referral: Referral 
 
 def _send_email(session: Session, n: Notification, case: Case, referral: Referral | None, settings: Settings,
                 gateways: Gateways) -> None:
-    if referral is None or not consent.is_allowed(session, case.id, ConsentPurpose.SHARE_WITH_SELECTED_FIRM):
+    if referral is None or not consent.is_allowed(session, case.id, ConsentPurpose.SHARE_WITH_SELECTED_FIRM,
+                                                  referral.firm.slug):
         return _block(n, "no_share_consent")
-    subject, body = render(n.template, case, referral)
+    rv = reports.latest_version(session, referral.id)
+    if rv is None:
+        return _block(n, "no_report_version")
+    now = utcnow()
+    ttl = timedelta(hours=settings.report_email_link_ttl_hours)
+    link = reports.make_link(settings, rv, int(ttl.total_seconds()), now)
+    subject, body = render(n.template, case, referral, link=link,
+                           link_expiry=(now + ttl).strftime("%Y-%m-%d %H:%M UTC"))
     n.provider_response_id = gateways.email.send(to=n.destination, subject=subject, text=body,
                                                  idempotency_key=n.event_key)
     n.status, n.status_reason = NotificationStatus.SUBMITTED, "delivery_unknown"
@@ -111,12 +119,18 @@ def main() -> None:
     args = parser.parse_args()
     configure_logging()
     settings = get_settings()
+    from caseline import crypto
+
+    crypto.configure(settings.caseline_field_encryption_key.get_secret_value()
+                     if settings.caseline_field_encryption_key else None)
     db = Database(settings.database_url)
     gateways = build_gateways(settings)
     while True:
         with db.sessionmaker() as session:
             count = process_due(session, settings, gateways)
-        log.info("outbox pass processed=%s", count)
+            swept = sweeps.run_all(session, settings, utcnow())
+        log.info("outbox pass processed=%s expired_referrals=%s stale_transfers=%s", count,
+                 swept["expired_referrals"], swept["stale_transfers"])
         if args.once:
             return
         time.sleep(args.interval)

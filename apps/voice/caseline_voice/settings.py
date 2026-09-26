@@ -7,12 +7,16 @@ from pathlib import Path
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+_PARENTS = Path(__file__).resolve().parents
+# In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
+REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
 APPROVED_DEMO_NUMBERS = frozenset({"+12676804795", "+16173187562"})
 
 
 class VoiceSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=REPO_ENV_FILE, extra="ignore", hide_input_in_errors=True)
+    # Repo-root .env for local runs; apps/voice/.env (git-ignored) for a `guava deploy` bundle. Later file wins.
+    model_config = SettingsConfigDict(env_file=(REPO_ENV_FILE, Path(__file__).resolve().parents[1] / ".env"),
+                                      extra="ignore", hide_input_in_errors=True)
 
     caseline_api_base_url: str = "http://127.0.0.1:8000"
     caseline_internal_api_token: SecretStr = SecretStr("dev-only-token")

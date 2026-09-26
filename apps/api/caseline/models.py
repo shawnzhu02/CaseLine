@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from caseline.crypto import EncryptedText
 from caseline.db import Base, UTCDateTime
 from caseline.enums import (
     CallState,
@@ -58,14 +59,14 @@ class TimestampMixin:
 class Caller(TimestampMixin, Base):
     __tablename__ = "callers"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    # Contact details are PII. Encryption at rest is provided by the managed database in staging/prod;
-    # application-level field encryption is a Phase 4 item (see docs/decisions/0001-architecture.md).
-    name: Mapped[str | None] = mapped_column(String(200))
-    callback_number: Mapped[str | None] = mapped_column(String(32))
+    # Contact details are PII: encrypted at the application layer (Fernet, CASELINE_FIELD_ENCRYPTION_KEY),
+    # on top of the managed database's encryption at rest. Not searchable by value.
+    name: Mapped[str | None] = mapped_column(EncryptedText())
+    callback_number: Mapped[str | None] = mapped_column(EncryptedText())
     callback_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    email: Mapped[str | None] = mapped_column(String(320))
+    email: Mapped[str | None] = mapped_column(EncryptedText())
     preferred_language: Mapped[str | None] = mapped_column(String(16))
-    accessibility_needs: Mapped[str | None] = mapped_column(Text)
+    accessibility_needs: Mapped[str | None] = mapped_column(EncryptedText())
     sms_opted_out: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
@@ -298,3 +299,29 @@ class AuditEvent(Base):
     result: Mapped[str] = mapped_column(String(32), nullable=False)
     event_metadata: Mapped[dict] = mapped_column("metadata", JSONType, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class ApiPrincipal(Base):
+    """A human or service identity with a role. Tokens are stored as SHA-256 hashes only."""
+
+    __tablename__ = "api_principals"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # admin | operator | firm_user | service
+    firm_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("firms.id", ondelete="RESTRICT"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+
+class ReportVersion(Base):
+    """Immutable snapshot of what a firm may see for a referral. A fact change after sharing creates a new version."""
+
+    __tablename__ = "report_versions"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    referral_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("referrals.id", ondelete="RESTRICT"), nullable=False)
+    case_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[dict] = mapped_column(JSONType, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("referral_id", "case_revision", name="uq_report_referral_revision"),)

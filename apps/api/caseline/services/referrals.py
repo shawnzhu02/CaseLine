@@ -19,7 +19,7 @@ from caseline.schemas import (
     NotificationOut,
     TriageConsents,
 )
-from caseline.services import consent
+from caseline.services import consent, reports
 from caseline.services.lifecycle import set_case_status, set_referral_status
 from caseline.services.notifications import enqueue
 
@@ -27,6 +27,28 @@ PENDING_PROMPT = (
     "Thank you. I've passed your information to {firm}. They will review it and decide independently whether "
     "they can help; no lawyer has been engaged yet. {contact}"
 )
+
+SHARED_REFERRAL_STATES = (ReferralStatus.PENDING_ASYNC, ReferralStatus.FIRM_NOTIFIED)
+
+
+def _firm_email(referral: Referral) -> str:
+    # Demo firms have no real inbox: alerts go to a non-routable address and are only ever mock-sent.
+    return referral.firm.referral_email or f"mock+{referral.firm.slug}@caseline.invalid"
+
+
+def update_facts(session: Session, case: Case, facts: dict[str, FactIn], now: datetime) -> list:
+    """Upsert facts; if a report was already shared, snapshot a new version and queue one 'updated' alert."""
+    upsert_facts(session, case, facts)
+    alerts = []
+    for referral in case.referrals:
+        if referral.status not in SHARED_REFERRAL_STATES or reports.latest_version(session, referral.id) is None:
+            continue
+        rv = reports.snapshot(session, case, referral, now)
+        if rv is not None:
+            alerts.append(enqueue(session, event_key=f"referral:{referral.id}:firm_alert:v{rv.case_revision}",
+                                  job_type=JobType.SEND_FIRM_EMAIL, case=case, referral=referral,
+                                  destination=_firm_email(referral), template="firm_referral_updated", now=now))
+    return alerts
 
 
 def upsert_facts(session: Session, case: Case, facts: dict[str, FactIn]) -> None:
@@ -41,11 +63,42 @@ def upsert_facts(session: Session, case: Case, facts: dict[str, FactIn]) -> None
     case.summary_version += 1
 
 
-def _record_consents(session: Session, case: Case, call: CallSession | None, c: TriageConsents) -> None:
-    for purpose, value in [(ConsentPurpose.SHARE_WITH_SELECTED_FIRM, c.share_with_selected_firm),
-                           (ConsentPurpose.SMS, c.sms), (ConsentPurpose.EMAIL, c.email)]:
+def _record_consents(session: Session, case: Case, referral: Referral, call: CallSession | None,
+                     c: TriageConsents) -> None:
+    # Share consent is specific to the firm the caller was just told about; SMS/email consent is not.
+    consent.record(session, purpose=ConsentPurpose.SHARE_WITH_SELECTED_FIRM, allowed=c.share_with_selected_firm,
+                   case_id=case.id, caller_id=case.caller_id, call_session_id=call.id if call else None,
+                   subject_firm_slug=referral.firm.slug)
+    for purpose, value in [(ConsentPurpose.SMS, c.sms), (ConsentPurpose.EMAIL, c.email)]:
         consent.record(session, purpose=purpose, allowed=value, case_id=case.id, caller_id=case.caller_id,
                        call_session_id=call.id if call else None)
+
+
+def share_allowed(session: Session, case: Case, referral: Referral) -> bool:
+    return consent.is_allowed(session, case.id, ConsentPurpose.SHARE_WITH_SELECTED_FIRM, referral.firm.slug)
+
+
+def dispatch_referral(session: Session, case: Case, referral: Referral, settings: Settings,
+                      now: datetime) -> tuple[list, bool]:
+    """Move a referral to pending_async; snapshot the report and queue firm/caller messages as consented."""
+    set_case_status(session, case, CaseStatus.REFERRAL_PENDING)
+    set_referral_status(session, referral, ReferralStatus.PENDING_ASYNC)
+    referral.expires_at = now + timedelta(hours=settings.referral_expiry_hours)
+    notes = []
+    share_ok = share_allowed(session, case, referral)
+    if share_ok:
+        referral.share_consent_id = consent.latest(session, case.id, ConsentPurpose.SHARE_WITH_SELECTED_FIRM,
+                                                   referral.firm.slug).id
+        reports.snapshot(session, case, referral, now)
+        notes.append(enqueue(session, event_key=f"referral:{referral.id}:firm_alert:v{case.summary_version}",
+                             job_type=JobType.SEND_FIRM_EMAIL, case=case, referral=referral,
+                             destination=_firm_email(referral), template="firm_referral_alert", now=now))
+    caller = case.caller
+    if caller and caller.callback_number and consent.is_allowed(session, case.id, ConsentPurpose.SMS):
+        notes.append(enqueue(session, event_key=f"referral:{referral.id}:caller_pending_sms",
+                             job_type=JobType.SEND_GUAVA_SMS, case=case, referral=referral,
+                             destination=caller.callback_number, template="caller_referral_pending", now=now))
+    return notes, share_ok
 
 
 def submit_extended_intake(session: Session, *, referral_id, req: ExtendedIntakeRequest, settings: Settings,
@@ -59,30 +112,13 @@ def submit_extended_intake(session: Session, *, referral_id, req: ExtendedIntake
         raise conflict("call_mismatch", "referral does not belong to this call")
 
     if req.consents is not None:
-        _record_consents(session, case, call, req.consents)
+        _record_consents(session, case, referral, call, req.consents)
     upsert_facts(session, case, req.facts)
 
     if case.status in (CaseStatus.TRANSFER_PENDING, CaseStatus.TRANSFER_FAILED):
         set_case_status(session, case, CaseStatus.EXTENDED_INTAKE)
-    set_case_status(session, case, CaseStatus.REFERRAL_PENDING)
-    set_referral_status(session, referral, ReferralStatus.PENDING_ASYNC)
-    referral.expires_at = now + timedelta(hours=settings.referral_expiry_hours)
-
-    notes = []
+    notes, share_ok = dispatch_referral(session, case, referral, settings, now)
     firm = referral.firm
-    share_ok = consent.is_allowed(session, case.id, ConsentPurpose.SHARE_WITH_SELECTED_FIRM)
-    if share_ok:
-        referral.share_consent_id = consent.latest(session, case.id, ConsentPurpose.SHARE_WITH_SELECTED_FIRM).id
-        # Firm alerts are mocked for demo firms: the demo numbers' owners never receive real case email.
-        dest = firm.referral_email or f"mock+{firm.slug}@caseline.invalid"
-        notes.append(enqueue(session, event_key=f"referral:{referral.id}:firm_alert:v{case.summary_version}",
-                             job_type=JobType.SEND_FIRM_EMAIL, case=case, referral=referral, destination=dest,
-                             template="firm_referral_alert", now=now))
-    caller = case.caller
-    if caller and caller.callback_number and consent.is_allowed(session, case.id, ConsentPurpose.SMS):
-        notes.append(enqueue(session, event_key=f"referral:{referral.id}:caller_pending_sms",
-                             job_type=JobType.SEND_GUAVA_SMS, case=case, referral=referral,
-                             destination=caller.callback_number, template="caller_referral_pending", now=now))
     audit(session, operation="referral.extended_intake", target_type="referral", target_id=referral.id,
           result="pending_async", reason=req.reason, share_consent=share_ok)
 
@@ -100,9 +136,16 @@ def submit_extended_intake(session: Session, *, referral_id, req: ExtendedIntake
     )
 
 
-def update_referral_status(session: Session, *, referral_id, status: str, actor: str, now: datetime) -> Referral:
+def update_referral_status(session: Session, *, referral_id, status: str, actor: str, role: str,
+                           actor_firm_id=None, now: datetime) -> Referral:
     referral = session.get(Referral, referral_id)
     if referral is None:
+        raise not_found("referral")
+    if role == "firm_user" and referral.firm_id != actor_firm_id:
+        # Firm isolation: a firm user cannot even confirm another firm's referral exists.
+        audit(session, operation="referral.firm_decision", target_type="referral", target_id=referral.id,
+              result="denied_cross_firm", actor=actor, role=role)
+        session.commit()
         raise not_found("referral")
     case = referral.case
     target = {"accepted": ReferralStatus.ACCEPTED, "declined": ReferralStatus.DECLINED,
@@ -115,7 +158,7 @@ def update_referral_status(session: Session, *, referral_id, status: str, actor:
     else:
         set_case_status(session, case, CaseStatus.HUMAN_REVIEW)
     audit(session, operation="referral.firm_decision", target_type="referral", target_id=referral.id,
-          result=status, actor=actor, role="operator")
+          result=status, actor=actor, role=role)
     caller = case.caller
     if target != ReferralStatus.EXPIRED and caller and caller.callback_number and consent.is_allowed(
             session, case.id, ConsentPurpose.SMS):

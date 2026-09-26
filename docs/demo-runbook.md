@@ -54,6 +54,8 @@ PowerShell window 2 (voice agent, runs locally and connects to Guava's cloud):
 
 ```powershell
 guava login        # once
+guava org use 6ab7f4cf7b00c3f140ce5686     # "Boston Hackathon": the org that owns +14849687497
+$env:GUAVA_API_KEY = "<key from that org>"  # the agent authenticates with this, not the CLI login
 $env:CASELINE_API_BASE_URL = "http://127.0.0.1:8000"
 $env:CASELINE_INTERNAL_API_TOKEN = "<same value>"
 guava run apps\voice             # phone mode on +14849687497
@@ -66,7 +68,9 @@ guava run apps\voice -- chat
 Before setting any live flag:
 
 1. Confirm **both** demo recipients (267-680-4795 and 617-318-7562) have agreed to receive test calls now.
-2. Confirm `+14849687497` is the Guava number attached to this agent (`guava numbers list`).
+2. Confirm `+14849687497` is listed by `guava numbers list` **after** `guava org use 6ab7f4cf7b00c3f140ce5686`,
+   and that `GUAVA_API_KEY` is a key from that org. Make sure no other copy of the agent (for example the
+   `caseline-voice` Render worker) is listening on the number.
 3. Confirm the API is reachable from the agent (local `guava run` → `http://127.0.0.1:8000`; a `guava deploy`ed agent needs a public HTTPS API URL).
 4. Confirm only fictional caller details will be used.
 5. Set, in the API window only:
@@ -85,9 +89,10 @@ Scenario A (Firm A):
    **"demo matter A"** in the **"CaseLine demo region"**, nobody is in danger, no deadlines, give a callback number.
 8. Verify the agent says "I can connect you to **Demo Partner Firm A**, a demonstration participant…" and asks permission.
 9. Say yes. Verify the call transfers to **267-680-4795**.
-10. After the call, record what happened (replace the id from `GET /v1/admin/cases` / the DB):
+10. After the call, record what happened. Easiest: open the case in the operator dashboard (`apps/admin`) →
+    **Transfer attempts** → pick Connected / No answer / Busy / Failed. Or via the API with an operator token:
     ```powershell
-    $h = @{ Authorization = "Bearer <token>" }
+    $h = @{ Authorization = "Bearer <operator token>" }
     Invoke-RestMethod -Method Post -Headers $h -ContentType application/json `
       -Uri http://127.0.0.1:8000/v1/transfer-attempts/<attempt_id>/outcome `
       -Body '{"result":"connected","source":"operator"}'      # or "no_answer" / "busy" / "failed"

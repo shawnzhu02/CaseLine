@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Literal
 
 import phonenumbers
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The only two live transfer destinations the user approved for the supervised demo (spec §4A).
 # Repo-root .env, so commands work from any directory.
-REPO_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+_PARENTS = Path(__file__).resolve().parents
+# In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
+REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
 
 APPROVED_DEMO_NUMBERS: frozenset[str] = frozenset({"+12676804795", "+16173187562"})
 
@@ -64,6 +66,22 @@ class Settings(BaseSettings):
     notification_max_retries: int = 5
     notification_backoff_base_seconds: int = 30
     referral_expiry_hours: int = 72
+    stale_transfer_minutes: int = 15
+    unacknowledged_referral_hours: int = 24
+    stale_firm_availability_days: int = 7
+
+    # Field-level encryption for caller PII (Fernet key) and HMAC secret for signed report links.
+    caseline_field_encryption_key: SecretStr | None = None
+    report_link_secret: SecretStr | None = None
+    report_link_ttl_minutes: int = 30  # links opened from the operator dashboard
+    report_email_link_ttl_hours: int = 72  # links sent in firm alert emails
+
+    # Requests per minute per client (in-memory; per-process). 0 disables.
+    rate_limit_per_minute: int = 120
+    report_link_rate_limit_per_minute: int = 30
+
+    # Comma-separated origins allowed to call the API from a browser (the admin dashboard calls server-side).
+    cors_allow_origins: str = ""
 
     @property
     def transfer_allowlist(self) -> frozenset[str]:
@@ -77,6 +95,15 @@ class Settings(BaseSettings):
     @property
     def simulated_availability_active(self) -> bool:
         return self.demo_mode and self.demo_simulate_firm_availability and self.app_env != "production"
+
+    @field_validator("database_url")
+    @classmethod
+    def _psycopg_driver(cls, v: str) -> str:
+        # Hosted Postgres (Render, Heroku-style) hands out postgres:// URLs; SQLAlchemy needs the psycopg driver.
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix):]
+        return v
 
     @model_validator(mode="after")
     def _assert_safe(self) -> Settings:
@@ -100,6 +127,9 @@ class Settings(BaseSettings):
         if self.app_env in {"staging", "demo", "production"}:
             if self.caseline_internal_api_token.get_secret_value() in {"", "dev-only-token"}:
                 raise ConfigError("CASELINE_INTERNAL_API_TOKEN must be set outside development")
+            if not self.caseline_field_encryption_key or not self.report_link_secret:
+                raise ConfigError(
+                    "CASELINE_FIELD_ENCRYPTION_KEY and REPORT_LINK_SECRET must be set outside development")
         if self.guava_sms_enabled and not self.guava_sms_from_number:
             raise ConfigError("GUAVA_SMS_ENABLED=true requires GUAVA_SMS_FROM_NUMBER")
         return self

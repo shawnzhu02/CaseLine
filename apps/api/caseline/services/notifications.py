@@ -16,8 +16,14 @@ TEMPLATES: dict[str, tuple[str, str]] = {
         "CaseLine referral {ref} awaiting your review",
         "A caller has asked CaseLine to share an intake summary with {firm}.\n"
         "Reference: {ref}\n"
-        "Access the report through the CaseLine firm portal (secure report links ship in Phase 3).\n"
+        "Secure report (link expires {link_expiry}): {link}\n"
         "Please run your own conflicts check; CaseLine has not established any representation.",
+    ),
+    "firm_referral_updated": (
+        "CaseLine referral {ref} was updated",
+        "The intake summary for CaseLine referral {ref} ({firm}) has new information.\n"
+        "Updated report (link expires {link_expiry}): {link}\n"
+        "Earlier versions are superseded.",
     ),
     "caller_referral_pending": (
         "",
@@ -41,9 +47,10 @@ def case_ref(case: Case) -> str:
     return str(case.id).split("-")[0].upper()
 
 
-def render(template: str, case: Case, referral: Referral | None) -> tuple[str, str]:
+def render(template: str, case: Case, referral: Referral | None, **extra: str) -> tuple[str, str]:
     subject, body = TEMPLATES[template]
-    values = {"ref": case_ref(case), "firm": referral.firm.display_name if referral else "a participating firm"}
+    values = {"ref": case_ref(case), "firm": referral.firm.display_name if referral else "a participating firm",
+              "link": "", "link_expiry": "", **extra}
     return subject.format(**values), body.format(**values)
 
 

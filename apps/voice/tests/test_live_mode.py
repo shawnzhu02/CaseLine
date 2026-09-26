@@ -145,3 +145,24 @@ def test_relay_debounces_partial_utterances():
     assert timers[0].cancelled and not timers[1].cancelled
     timers[1].fn()
     assert backend.utterances == [("caller", "My house burned down", "u1")]
+
+
+def test_unexpected_error_still_ends_the_call():
+    class Boom(LiveBackend):
+        def post_utterance(self, *a, **k):
+            raise RuntimeError("unexpected")
+
+    flow = flow_for(Boom([]))
+    gw = MockCallGateway(fields={"intake_consent": "yes", "issue_summary": "x"})
+    flow.on_call_start(gw)
+    flow.on_task_complete(gw, "consent")
+    flow._after_triage = lambda gw: (_ for _ in ()).throw(ValueError("bug"))  # simulate a bug downstream
+    flow.on_task_complete(gw, "story")
+    assert gw.ended_with == prompts.BACKEND_FALLBACK
+
+
+def test_follow_up_questions_are_optional():
+    backend, flow, gw = live_flow([{"ask": "Where?", "ask_key": "location"}])
+    flow.on_task_complete(gw, "story")
+    field = gw.tasks[-1][1][0]
+    assert gw.current_task == "q_location" and field.required is False

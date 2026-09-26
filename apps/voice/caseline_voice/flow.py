@@ -78,6 +78,10 @@ class CallFlow:
             # Never guess a firm or number: human-review fallback.
             log.error("backend failure during %s: %s", task_id, type(exc).__name__)
             gw.end_call(prompts.BACKEND_FALLBACK)
+        except Exception:
+            # Any other failure must still end the call cleanly; an agent with no next task would just wait.
+            log.exception("unexpected failure during %s", task_id)
+            gw.end_call(prompts.BACKEND_FALLBACK)
 
     def on_session_end(self, gw: CallGateway, termination_reason: str | None) -> None:
         self._event(gw, "session_ended", termination_reason=termination_reason)
@@ -266,7 +270,8 @@ class CallFlow:
         gw.set_variable("pending_key", key)
         gw.set_variable("pending_question", question)
         gw.start_task(f"q_{key}", "Ask this one question in one short sentence and record the answer. Nothing else.",
-                      [FieldSpec("answer", "The caller's answer, in their own words.", question=question)])
+                      [FieldSpec("answer", "The caller's answer, in their own words. If they don't know or don't "
+                                 "answer, record 'unknown' and finish.", question=question, required=False)])
 
     # ---- helpers ---------------------------------------------------------------------------------------------
     def _event(self, gw: CallGateway, event_type: str, **extra) -> None:

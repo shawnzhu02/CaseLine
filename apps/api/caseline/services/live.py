@@ -117,7 +117,7 @@ def process_utterance(session: Session, *, provider_call_id: str, speaker: str, 
         row.last_question = A.question_for_text(text)
         return snapshot(session, call, row)
 
-    delta_rules = A.rule_extract(text, row.last_question)
+    delta_rules = A.rule_extract(text, row.last_question, row.facts)
     delta_llm: dict = {}
     if extractor is not None:
         question_text = A.QUESTIONS.get(row.last_question or "", (None, []))[0]

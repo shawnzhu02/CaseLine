@@ -46,11 +46,12 @@ def post_utterance(provider_call_id: str, body: UtteranceIn, request: Request,
     ask = QUESTIONS[snap["next_question"]][0] if body.speaker == "caller" and snap["next_question"] else None
     row.updated_at = clock()
     session.commit()
-    ready = snap["ready"] and snap["urgency"] != "Emergency"
-    # Nothing left to ask but no routable category (off-script matter), or a long call: finish intake anyway;
-    # triage then routes to human review instead of the agent waiting for a match that will never come.
-    stalled = (not ready and snap["urgency"] != "Emergency" and snap["next_question"] is None
-               and row.utterances_processed >= 3) or row.utterances_processed >= 12
+    emergency = snap["urgency"] == "Emergency"
+    ready = snap["ready"] and not emergency
+    # Never wait forever: finish intake on an emergency (triage gives 911 guidance), when nothing is left to ask
+    # but there is no routable category (off-script matter), or after a long call. Triage then routes safely.
+    stalled = (emergency or (snap["next_question"] is None and row.utterances_processed >= 3)
+               or row.utterances_processed >= 8)
     return {**snap, "ask": ask, "ask_key": snap["next_question"] if ask else None, "assessment_ready": ready,
             "finish_intake": bool(ready or stalled)}
 

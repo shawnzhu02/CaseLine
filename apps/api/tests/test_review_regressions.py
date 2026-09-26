@@ -91,3 +91,42 @@ def test_missing_llm_sdk_never_breaks_startup(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     assert build_extractor(Settings(_env_file=None, app_env="test", assessment_llm_enabled=True)) is None
+
+
+def test_is_everyone_safe_yes_is_not_an_emergency(h):
+    say(h, "caller", "I was in a house fire three days ago.")
+    say(h, "agent", "I'm so sorry to hear about the fire. Is everyone safe now?")
+    s = say(h, "caller", "Yes.")
+    assert s["urgency"] != "Emergency"
+
+
+def test_repeated_question_cannot_erase_earlier_answer(h):
+    say(h, "caller", "I was in a house fire in Boston, Massachusetts.")
+    say(h, "agent", "Did you or anyone else need medical treatment after this?")
+    say(h, "caller", "Yes.")
+    say(h, "agent", "And did you or anyone else need medical treatment after this?")
+    s = say(h, "caller", "No.")
+    assert s["category"] == "Personal Injury"
+
+
+def test_emergency_always_finishes_intake(h):
+    s = say(h, "caller", "There's a fire and my kids are trapped, we're in danger right now in Boston")
+    assert s["finish_intake"] is True and s["assessment_ready"] is False
+
+
+def test_filler_words_are_not_part_of_the_city():
+    assert A.rule_extract("Uh Boston, Massachusetts.", None)["city"] == "Boston"
+
+
+def test_real_call_transcript_regression(h):
+    """Replay of the 16:11 call that looped: it must end ready with a match (fire, Boston, no injury)."""
+    say(h, "agent", "Please go ahead and tell me what's going on.")
+    say(h, "caller", "Yeah, so I was in a house fire three days ago.")
+    say(h, "agent", "I'm so sorry to hear about the fire. Is everyone safe now?")
+    say(h, "caller", "Yes.")
+    say(h, "agent", "Please tell me more about what happened, and also, where did this happen? Which city and state?")
+    say(h, "caller", "Uh Boston, Massachusetts.")
+    say(h, "agent", "I understand. Did you or anyone else need medical treatment after this?")
+    s = say(h, "caller", "No.")
+    assert s["urgency"] != "Emergency"
+    assert s["assessment_ready"] is True and s["match"]["display_name"] == "Insurance Lawyer (demo)"

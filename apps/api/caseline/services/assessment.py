@@ -109,9 +109,16 @@ _STATES_BY_LENGTH = sorted(US_STATES.items(), key=lambda kv: -len(kv[0]))
 _EXTRA_STATE_PATTERNS = {"washington dc": "DC", "washington, dc": "DC", "d.c.": "DC"}
 
 
-def rule_extract(utterance: str, last_question: str | None) -> dict[str, Any]:
-    """Deterministic keyword/pattern extraction. Returns only the facts this utterance supports."""
-    t = utterance.lower()
+_FILLER = re.compile(r"^(?:(?:uh|um|umm|er|so|yeah|well|okay|ok|like)\b[\s,]*)+", re.I)
+
+
+def rule_extract(utterance: str, last_question: str | None, known: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Deterministic keyword/pattern extraction. Returns only the facts this utterance supports.
+
+    A bare yes/no only fills facts that are still unknown: it never overwrites an earlier answer (agents repeat
+    questions, and a confused "no" to a repeat must not erase "I went to the hospital")."""
+    known = known or {}
+    t = _FILLER.sub("", utterance.lower().strip())
     out: dict[str, Any] = {}
 
     for pattern, code in _EXTRA_STATE_PATTERNS.items():
@@ -171,14 +178,15 @@ def rule_extract(utterance: str, last_question: str | None) -> dict[str, Any]:
         out["immediate_danger"] = True
 
     # Bare yes/no answers apply only to the question the agent asked immediately before.
-    if last_question in QUESTIONS:
-        targets = QUESTIONS[last_question][1]
-        if _YES.search(t):
-            for key in targets:
-                out.setdefault(key, True)
-        elif _NO.search(t):
-            for key in targets:
-                out.setdefault(key, False)
+    yes, no = bool(_YES.search(t)), bool(_NO.search(t))
+    if last_question == "safe" and (yes or no):
+        # "Is everyone safe?" -> yes means NOT in danger (inverted polarity).
+        if "immediate_danger" not in out and known.get("immediate_danger") is None:
+            out["immediate_danger"] = not yes
+    elif last_question in QUESTIONS and (yes or no):
+        for key in QUESTIONS[last_question][1]:
+            if key not in out and known.get(key) is None:
+                out[key] = yes
     return out
 
 
@@ -364,7 +372,9 @@ def merge_facts(current: dict[str, Any], *deltas: dict[str, Any]) -> tuple[dict[
 def question_for_text(agent_text: str) -> str | None:
     """Map what our agent just said to a known question key (for yes/no interpretation). None = unrelated."""
     t = agent_text.lower()
-    if _has(t, "in danger", "are you safe", "is everyone safe"):
+    if _has(t, "are you safe", "is everyone safe", "everyone safe", "are you okay", "is everyone okay"):
+        return "safe"
+    if _has(t, "in danger"):
         return "danger"
     if _has(t, "court date", "court dates", "deadline", "deadlines", "hearing"):
         return "deadline"

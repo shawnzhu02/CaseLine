@@ -238,6 +238,7 @@ class CallFlow:
             return
         if result.get("urgency") == "Emergency" and not gw.get_variable("emergency_sent"):
             gw.set_variable("emergency_sent", True)
+            gw.set_variable("ready_sent", True)
             gw.send_instruction(prompts.EMERGENCY_NOW)
             return
         asked = gw.get_variable("asked_questions") or []

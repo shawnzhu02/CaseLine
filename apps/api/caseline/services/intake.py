@@ -110,8 +110,22 @@ def triage(session: Session, req: TriageRequest, settings: Settings, now: dateti
     for key, value in facts.model_dump(exclude_none=True).items():
         session.add(CaseFact(case_id=case.id, key=key, value=value, provenance=FactProvenance.CALLER_STATED))
 
+    # A ready live assessment supplies jurisdiction/category when the agent did not send them (live mode).
+    from caseline.services.live import assessed_routing
+
+    assessed_j, assessed_area, assessed_deadline = assessed_routing(session, call.id)
+    if assessed_deadline and not facts.caller_reported_deadline:
+        facts = facts.model_copy(update={"caller_reported_deadline": "caller mentioned a date or deadline"})
+    if assessed_j and not facts.jurisdiction:
+        facts = facts.model_copy(update={"jurisdiction": assessed_j})
+    if assessed_area and not facts.practice_area:
+        facts = facts.model_copy(update={"practice_area": assessed_area})
+        session.add(CaseFact(case_id=case.id, key="assessed_practice_area", value=assessed_area,
+                             provenance=FactProvenance.INFERRED))
     case.jurisdiction = facts.jurisdiction
     area, confidence = classify(facts.practice_area, facts.issue_summary)
+    if assessed_area and facts.practice_area == assessed_area:
+        confidence = "live_assessment"
     case.practice_area = area
     case.practice_area_confidence = confidence
 
@@ -160,13 +174,12 @@ def triage(session: Session, req: TriageRequest, settings: Settings, now: dateti
     session.add(referral)
     session.flush()
     selected = SelectedFirm(firm_id=firm.slug, display_name=firm.display_name, is_demo=firm.is_demo)
-    label = f"{firm.display_name}, a demonstration participant" if firm.is_demo else firm.display_name
+    label = firm.display_name  # demo firm names already carry "(demo)"
 
     if match.kind == "transfer":
         set_case_status(session, case, CaseStatus.TRANSFER_PENDING)
         return finish(RoutingAction.TRANSFER, CaseStatus.TRANSFER_PENDING,
-                      f"I can connect you to {label}. They will decide independently whether they can help. "
-                      "Would you like me to transfer you?",
+                      f"I can connect you now with {label}, who will decide if they can help. Shall I connect you?",
                       ["ask_transfer_consent", "authorize_transfer", "extended_intake_if_declined"],
                       referral_id=referral.id, selected_firm=selected,
                       availability_source=match.availability_source, questions=_extended_questions(area))

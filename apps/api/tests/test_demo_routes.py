@@ -1,8 +1,8 @@
-"""Spec §4A / §28 critical demo assertions: A -> +12676804795, B -> +16173187562, only after consent."""
+"""Demo routing: every demo lawyer rings the supervised demo line +16173187562, only after consent."""
 
 from __future__ import annotations
 
-FIRM_A = "+12676804795"
+FIRM_A = "+16173187562"  # all demo lawyers share the demo line
 FIRM_B = "+16173187562"
 
 
@@ -18,7 +18,7 @@ def test_demo_area_a_selects_only_firm_a(h):
     result = h.triage("call-a", practice_area="DEMO_AREA_A").json()
     assert result["action"] == "transfer"
     assert result["selected_firm"]["firm_id"] == "demo-firm-a"
-    assert result["selected_firm"]["display_name"] == "Demo Partner Firm A"
+    assert result["selected_firm"]["display_name"] == "Insurance Lawyer (demo)"
     assert result["selected_firm"]["is_demo"] is True
 
 
@@ -26,7 +26,7 @@ def test_demo_area_b_selects_only_firm_b(h):
     result = h.triage("call-b", practice_area="DEMO_AREA_B").json()
     assert result["action"] == "transfer"
     assert result["selected_firm"]["firm_id"] == "demo-firm-b"
-    assert result["selected_firm"]["display_name"] == "Demo Partner Firm B"
+    assert result["selected_firm"]["display_name"] == "Personal Injury Lawyer (demo)"
 
 
 def test_triage_response_does_not_expose_phone_before_consent(h):
@@ -42,7 +42,7 @@ def test_authorize_transfer_returns_firm_a_number_after_consent(live):
     assert result_a["selected_firm"]["firm_id"] == "demo-firm-a"
     assert auth_a.status_code == 200, auth_a.text
     assert auth_a.json()["destination_e164"] == FIRM_A
-    assert auth_a.json()["display_name"] == "Demo Partner Firm A"
+    assert auth_a.json()["display_name"] == "Insurance Lawyer (demo)"
 
 
 def test_authorize_transfer_returns_firm_b_number_after_consent(live):
@@ -55,7 +55,8 @@ def test_authorize_transfer_returns_firm_b_number_after_consent(live):
 def test_scenarios_never_cross_destinations(live):
     _, auth_a = _route(live, "call-a", "DEMO_AREA_A")
     _, auth_b = _route(live, "call-b", "DEMO_AREA_B")
-    assert {auth_a.json()["destination_e164"], auth_b.json()["destination_e164"]} == {FIRM_A, FIRM_B}
+    assert auth_a.json()["display_name"] != auth_b.json()["display_name"]
+    assert {auth_a.json()["destination_e164"], auth_b.json()["destination_e164"]} == {"+16173187562"}
 
 
 def test_mock_transfer_attempt_uses_server_destination(live):

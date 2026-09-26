@@ -20,7 +20,8 @@ ALL_DAYS = range(0, 7)
 
 def demo_firms(settings: Settings) -> list[dict]:
     common = {
-        "jurisdictions": ["DEMO_JURISDICTION"],
+        # US-MA is a FICTIONAL demo mapping for the live-assessment script, not a claim about the recipients.
+        "jurisdictions": ["DEMO_JURISDICTION", "US-MA"],
         "languages": ["en"],
         "accepting_referrals": True,
         "accepting_live_calls": True,
@@ -32,11 +33,14 @@ def demo_firms(settings: Settings) -> list[dict]:
     }
     return [
         {**common, "slug": "demo-firm-a", "display_name": settings.demo_firm_a_name,
-         "transfer_number": settings.demo_firm_a_transfer_number, "practice_areas": ["DEMO_AREA_A"],
-         "routing_priority": 10},
+         "transfer_number": settings.demo_firm_a_transfer_number,
+         "practice_areas": ["DEMO_AREA_A", "property_insurance"], "routing_priority": 10},
         {**common, "slug": "demo-firm-b", "display_name": settings.demo_firm_b_name,
-         "transfer_number": settings.demo_firm_b_transfer_number, "practice_areas": ["DEMO_AREA_B"],
-         "routing_priority": 10},
+         "transfer_number": settings.demo_firm_b_transfer_number,
+         "practice_areas": ["DEMO_AREA_B", "personal_injury"], "routing_priority": 10},
+        {**common, "slug": "demo-firm-c", "display_name": settings.demo_firm_c_name,
+         "transfer_number": settings.demo_firm_c_transfer_number,
+         "practice_areas": ["premises_liability"], "routing_priority": 10},
     ]
 
 

@@ -35,12 +35,14 @@ class CaseLineBackend:
         self.client = client or httpx.Client(base_url=base_url, timeout=httpx.Timeout(8.0, connect=3.0))
         self._auth = {"Authorization": f"Bearer {token}"}
 
-    def _post(self, path: str, body: dict, idempotency_key: str | None = None) -> dict:
+    def _post(self, path: str, body: dict, idempotency_key: str | None = None,
+              timeout: float | None = None) -> dict:
         headers = dict(self._auth)
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
         try:
-            r = self.client.post(path, json=body, headers=headers)
+            kwargs = {"timeout": timeout} if timeout else {}
+            r = self.client.post(path, json=body, headers=headers, **kwargs)
         except httpx.HTTPError as exc:
             raise BackendUnavailable(type(exc).__name__) from exc
         if r.status_code in (401, 403):
@@ -86,6 +88,12 @@ class CaseLineBackend:
                            "reason": reason},
                           f"{provider_call_id}:extended-intake:v1")
         return self._parse(ExtendedIntakeResult, data)
+
+    def post_utterance(self, provider_call_id: str, speaker: str, text: str,
+                       utterance_id: str | None = None) -> dict:
+        # Runs off the call thread; allow for extraction time on the server.
+        return self._post(f"/v1/calls/{provider_call_id}/utterances",
+                          {"speaker": speaker, "text": text[:2000], "utterance_id": utterance_id}, timeout=12.0)
 
     def post_event(self, provider_call_id: str, event_type: str, event_id: str, **extra) -> None:
         self._post("/v1/calls/events", {"provider_event_id": event_id, "provider_call_id": provider_call_id,

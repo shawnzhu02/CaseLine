@@ -18,6 +18,8 @@ PRACTICE_AREAS: dict[str, str] = {
     "DEMO_AREA_B": "Fictional demo matter routed to Demo Partner Firm B",
     "property_insurance": "Property damage / insurance dispute",
     "housing": "Housing / tenancy",
+    "personal_injury": "Personal injury",
+    "premises_liability": "Premises liability",
 }
 
 # Conservative keyword map for a *provisional* category when the agent could not pick one.
@@ -36,6 +38,21 @@ EXTENDED_INTAKE_QUESTIONS: dict[str, list[tuple[str, str]]] = {
         ("adverse_decision", "Have you received a decision or letter from the insurer?"),
         ("notices_or_deadlines", "Have you received any legal notices or dates you were told about?"),
         ("emergency_services_involved", "Were police or fire services involved?"),
+        ("contact_preferences", "What's the best time to reach you, and may we leave voicemail or text?"),
+    ],
+    "premises_liability": [
+        ("event_date", "Roughly when did this happen?"),
+        ("injuries_and_treatment", "What injuries were there, and where were you treated?"),
+        ("prior_reports", "When and how was the problem reported to the landlord or owner?"),
+        ("notices_or_deadlines", "Have you received any legal notices or dates you were told about?"),
+        ("contact_preferences", "What's the best time to reach you, and may we leave voicemail or text?"),
+    ],
+    "personal_injury": [
+        ("event_date", "Roughly when did this happen?"),
+        ("injuries_and_treatment", "What injuries were there, and where were you treated?"),
+        ("responsible_party", "Who was responsible for the property or situation?"),
+        ("prior_reports", "Had anyone reported the problem before it happened? When and how?"),
+        ("notices_or_deadlines", "Have you received any legal notices or dates you were told about?"),
         ("contact_preferences", "What's the best time to reach you, and may we leave voicemail or text?"),
     ],
     "housing": [

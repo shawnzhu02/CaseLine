@@ -27,3 +27,9 @@ node_modules/
 # Transcripts / real case data must never be committed
 transcripts/
 recordings/
+
+# Vercel project links (local)
+.vercel/
+
+# Local logs
+*.log

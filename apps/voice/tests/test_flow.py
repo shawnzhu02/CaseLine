@@ -13,7 +13,7 @@ from caseline_voice.schemas import ExtendedIntakeResult, TransferAttempt, Transf
 from caseline_voice.settings import APPROVED_DEMO_NUMBERS, VoiceSettings
 from caseline_voice.telecom import MockCallGateway
 
-FIRM_A = "+12676804795"
+FIRM_A = "+16173187562"  # the demo line all demo lawyers share
 TRIAGE_FIELDS = {"caller_name": "Alex Demo", "issue_summary": "Fictional demo matter", "immediate_danger": "no",
                  "jurisdiction": "CaseLine demo region", "practice_area": "Demo matter A",
                  "callback_number": "(212) 555-0100"}
@@ -82,7 +82,7 @@ def test_happy_path_dials_exact_backend_destination():
     assert len(gw.transfers) == 1
     dest, instructions = gw.transfers[0]
     assert dest == FIRM_A
-    assert "Demo Partner Firm A" in instructions and FIRM_A not in instructions
+    assert "Connecting you now" in instructions and FIRM_A not in instructions
     triage_payload = backend.calls[1][1]
     assert triage_payload["facts"]["practice_area"] == "DEMO_AREA_A"
     assert triage_payload["caller"]["callback_number"] == "+12125550100"
@@ -170,8 +170,8 @@ def test_after_hours_extended_intake_submits_facts_and_consents():
 
 
 def test_voice_allowlist_cannot_be_widened():
-    s = VoiceSettings(_env_file=None, voice_transfer_allowlist="+12676804795,+15555550199")
-    assert s.transfer_allowlist == frozenset({"+12676804795"})
+    s = VoiceSettings(_env_file=None, voice_transfer_allowlist="+16173187562,+12676804795,+15555550199")
+    assert s.transfer_allowlist == frozenset({"+16173187562"})
 
 
 def test_default_inbound_number():
@@ -179,5 +179,5 @@ def test_default_inbound_number():
 
 
 def test_normalize_phone():
-    assert normalize_phone("267-680-4795", "US") == FIRM_A
+    assert normalize_phone("617-318-7562", "US") == FIRM_A
     assert normalize_phone("not a number", "US") is None

@@ -20,7 +20,8 @@ from sqlalchemy.orm import Session
 from caseline.deps import get_session
 from caseline.models import ApiPrincipal
 
-ROLES = ("admin", "operator", "firm_user", "service")
+# `demo` can only run the scripted simulation and read simulated calls (public judge demo page).
+ROLES = ("admin", "operator", "firm_user", "service", "demo")
 
 
 @dataclass(frozen=True)

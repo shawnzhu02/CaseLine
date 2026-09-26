@@ -14,15 +14,10 @@ PURPOSE = (
     "local emergency number) before anything else."
 )
 
-NOTICE = (
-    "Thanks for calling CaseLine. I'm an AI intake assistant, not a lawyer, and CaseLine is a referral service, "
-    "not a law firm. I can take some details and try to connect you with a participating firm. This call is "
-    "handled by our voice provider and may be recorded and transcribed."
-)
+# Kept deliberately short: AI disclosure, not-a-lawyer, recording notice, one consent question.
+NOTICE = "CaseLine here. I'm an AI, not a lawyer, and this call may be recorded."
 
-CONSENT_QUESTION = (
-    "Is it okay for me to collect some information about your situation so we can try to find a participating firm?"
-)
+CONSENT_QUESTION = "Okay to continue?"
 
 # Human-friendly labels the model chooses from -> backend codes. None means "unknown" (backend routes to review).
 JURISDICTION_CHOICES: dict[str, str | None] = {
@@ -48,14 +43,29 @@ TRIAGE_READ_BACK = (
 )
 
 TRANSFER_HANDOFF = (
-    "Tell the caller you're connecting them with {display_name} now, that the firm will decide independently "
-    "whether it can help, and then transfer. Do not summarize or repeat any case details during the transfer, "
-    "and do not read out the phone number."
+    "Say only \"Connecting you now.\" and transfer immediately. Do not repeat case details or read out any number."
 )
 
 EXTENDED_OBJECTIVE = (
     "Collect a few more details so the selected firm can review the matter later. Keep it brief; if the caller is "
     "distressed or wants to stop, stop asking questions. Record 'declined' if they prefer not to answer."
+)
+
+LIVE_TRIAGE_OBJECTIVE = (
+    "Keep this call fast: one short sentence per turn, no summaries, no read-backs, no questions of your own. "
+    "Ask the question, briefly acknowledge the answer, and finish. Never tell the caller what type of case they "
+    "have, never give legal advice, and never name a lawyer or firm yourself."
+)
+LIVE_COMPLETION = "Complete this task as soon as CaseLine tells you ASSESSMENT_READY or tells you to finish."
+ASK_NEXT = "CaseLine follow-up: ask the caller now, in one short sentence: \"{question}\""
+ASSESSMENT_READY = "ASSESSMENT_READY: complete the task now. Do not ask anything else."
+FINISH_INTAKE = (
+    "CaseLine has what it needs for now. Ask for the caller's name if you don't have it, then complete the task. "
+    "Do not name a type of case or a lawyer."
+)
+EMERGENCY_NOW = (
+    "The caller may be in immediate danger. Tell them clearly to hang up and call 911 right now, then complete "
+    "the task."
 )
 
 BACKEND_FALLBACK = (

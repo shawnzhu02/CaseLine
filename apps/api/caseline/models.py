@@ -325,3 +325,27 @@ class ReportVersion(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
 
     __table_args__ = (UniqueConstraint("referral_id", "case_revision", name="uq_report_referral_revision"),)
+
+
+class CallAssessment(TimestampMixin, Base):
+    """Live, per-call assessment. Holds extracted facts and the derived view, never utterance text."""
+
+    __tablename__ = "call_assessments"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    call_session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("call_sessions.id", ondelete="RESTRICT"), unique=True, nullable=False
+    )
+    facts: Mapped[dict] = mapped_column(JSONType, default=dict, nullable=False)
+    view: Mapped[dict] = mapped_column(JSONType, default=dict, nullable=False)
+    history: Mapped[list] = mapped_column(JSONType, default=list, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_question: Mapped[str | None] = mapped_column(String(32))
+    asked_question: Mapped[str | None] = mapped_column(String(32))
+    utterances_processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Demo-only live transcript (LIVE_TRANSCRIPT_ENABLED); purged after LIVE_TRANSCRIPT_RETENTION_MINUTES.
+    transcript: Mapped[list | None] = mapped_column(JSONType, nullable=True)
+    # Set explicitly from the request clock by the live service (no ORM onupdate), so "active in the last N
+    # minutes" windows follow the same clock as everything else.
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)
+
+    __table_args__ = (Index("ix_call_assessments_updated_at", "updated_at"),)

@@ -15,6 +15,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <header className="top">
             <strong>CaseLine Ops</strong>
             <nav>
+              <Link href="/live">Live</Link>
               <Link href="/cases">Cases</Link>
               <Link href="/firms">Firms</Link>
               <Link href="/failures">Needs attention</Link>

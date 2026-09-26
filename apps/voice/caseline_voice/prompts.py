@@ -15,9 +15,9 @@ PURPOSE = (
 )
 
 # Kept deliberately short: AI disclosure, not-a-lawyer, recording notice, one consent question.
-NOTICE = "Hi, this is CaseLine, an AI legal intake assistant, not a lawyer. This call may be recorded."
+NOTICE = "CaseLine here. I'm an AI, not a lawyer, and this call may be recorded."
 
-CONSENT_QUESTION = "Is it okay if I ask a few questions to find you the right help?"
+CONSENT_QUESTION = "Okay to continue?"
 
 # Human-friendly labels the model chooses from -> backend codes. None means "unknown" (backend routes to review).
 JURISDICTION_CHOICES: dict[str, str | None] = {

@@ -89,3 +89,35 @@ jobs:
           if git grep -n -i -E "twilio|telnyx|amazon[ _-]?connect" -- ':!docs/**' ':!*.md' ':!.github/**' ':!**/test_no_prohibited_telecom.py'; then
             echo "Prohibited telecom vendor reference found"; exit 1
           fi
+
+  admin-dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build   # also generates next-env.d.ts (git-ignored) and type-checks
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      - run: npm run typecheck
+
+  docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API/worker image
+        run: docker build -t caseline-api apps/api
+      - name: Build voice agent image
+        run: docker build -t caseline-voice apps/voice
+      - name: API image imports and migrates (SQLite, no network services)
+        run: |
+          docker run --rm -e APP_ENV=test -e DATABASE_URL=sqlite:////tmp/ci.db caseline-api \
+            sh -c "alembic upgrade head && python -m caseline.cli seed && python -c 'import caseline.main'"

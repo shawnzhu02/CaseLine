@@ -1,0 +1,103 @@
+# Render Blueprint for a CaseLine staging/demo environment.
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo. Then fill every `sync: false` secret
+# (generate them with: python -m caseline.cli generate-keys). See docs/deployment.md.
+#
+# Live-transfer and SMS flags stay OFF here; flip DEMO_LIVE_TRANSFER_ENABLED only for a supervised demo.
+
+envVarGroups:
+  - name: caseline-shared
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: TELECOM_PROVIDER
+        value: guava
+      - key: GUAVA_MODE
+        value: mock
+      - key: GUAVA_SMS_ENABLED
+        value: "false"
+      - key: EMAIL_PROVIDER
+        value: mock
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_LIVE_TRANSFER_ENABLED
+        value: "false"
+      - key: DEMO_SIMULATE_FIRM_AVAILABILITY
+        value: "false"
+      - key: DEMO_TRANSFER_ALLOWLIST
+        value: "+12676804795,+16173187562"
+      - key: CASELINE_INTERNAL_API_TOKEN
+        sync: false
+      - key: CASELINE_FIELD_ENCRYPTION_KEY
+        sync: false
+      - key: REPORT_LINK_SECRET
+        sync: false
+      - key: API_PUBLIC_BASE_URL
+        sync: false # e.g. https://caseline-api.onrender.com
+
+services:
+  - type: web
+    name: caseline-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    healthCheckPath: /health/ready
+    preDeployCommand: alembic upgrade head && python -m caseline.cli seed
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: caseline-db
+          property: connectionString
+      - fromGroup: caseline-shared
+
+  - type: worker
+    name: caseline-outbox
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    dockerCommand: python -m caseline.workers.outbox
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: caseline-db
+          property: connectionString
+      - fromGroup: caseline-shared
+
+  # Guava voice agent: outbound-only connection to Guava, answers +14849687497.
+  - type: worker
+    name: caseline-voice
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./apps/voice/Dockerfile
+    dockerContext: ./apps/voice
+    envVars:
+      - key: GUAVA_API_KEY
+        sync: false # key for the org that owns +14849687497
+      - key: GUAVA_AGENT_NUMBER
+        value: "+14849687497"
+      - key: CASELINE_API_BASE_URL
+        sync: false # the caseline-api https URL
+      - key: CASELINE_INTERNAL_API_TOKEN
+        sync: false # same value as in caseline-shared
+
+  - type: web
+    name: caseline-admin
+    runtime: node
+    plan: starter
+    rootDir: apps/admin
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: CASELINE_API_BASE_URL
+        sync: false
+      # Operators sign in with their personal token (python -m caseline.cli create-principal ...);
+      # the dashboard keeps it in an encrypted, httpOnly session cookie.
+      - key: DASHBOARD_SESSION_SECRET
+        generateValue: true
+
+databases:
+  - name: caseline-db
+    plan: basic-256mb
+    databaseName: caseline
+    user: caseline

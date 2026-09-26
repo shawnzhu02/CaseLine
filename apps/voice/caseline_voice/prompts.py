@@ -53,9 +53,8 @@ EXTENDED_OBJECTIVE = (
 
 LIVE_TRIAGE_OBJECTIVE = (
     "Keep this call fast: one short sentence per turn, no summaries, no read-backs, no questions of your own. "
-    "Ask \"What happened?\", then ask only the follow-up questions CaseLine sends you, one at a time, with a brief "
-    "word of empathy at most. Never tell the caller what type of case they have, never give legal advice, and never "
-    "name a lawyer or firm yourself."
+    "Ask the question, briefly acknowledge the answer, and finish. Never tell the caller what type of case they "
+    "have, never give legal advice, and never name a lawyer or firm yourself."
 )
 LIVE_COMPLETION = "Complete this task as soon as CaseLine tells you ASSESSMENT_READY or tells you to finish."
 ASK_NEXT = "CaseLine follow-up: ask the caller now, in one short sentence: \"{question}\""

@@ -8,7 +8,7 @@ from caseline_voice import prompts
 from caseline_voice.backend_client import BackendUnavailable
 from caseline_voice.flow import CallFlow, SpeechRelay
 from caseline_voice.telecom import GuavaCallGateway, MockCallGateway
-from tests.test_flow import FakeBackend
+from tests.test_flow import FakeBackend, triage_result
 
 
 class LiveBackend(FakeBackend):
@@ -38,40 +38,82 @@ def test_live_triage_checklist_has_no_model_chosen_routing_fields():
     flow.on_task_complete(gw, "consent")
     task_id, checklist = gw.tasks[-1]
     keys = [getattr(i, "key", None) for i in checklist]
-    assert task_id == "triage" and "jurisdiction" not in keys and "practice_area" not in keys
+    assert task_id == "story" and "jurisdiction" not in keys and "practice_area" not in keys
     # And the real SDK accepts it, including completion criteria.
     GuavaCallGateway(MockCall()).start_task("triage", "o", checklist, completion_criteria=prompts.LIVE_COMPLETION)
 
 
-def test_backend_questions_are_injected_once_and_ready_signal_sent_once():
-    backend = LiveBackend([
-        {"ask": "Where did this happen? Which city and state?", "assessment_ready": False},
-        {"ask": None, "assessment_ready": True},
-        {"ask": None, "assessment_ready": True},
-    ])
+def live_flow(responses):
+    backend = LiveBackend(responses)
     flow = flow_for(backend)
-    gw = MockCallGateway()
-    flow.on_speech(gw, "caller", "My house burned down.")
-    flow.on_speech(gw, "agent", "Where did this happen?")
-    flow.on_speech(gw, "caller", "Cambridge, Massachusetts.")
-    flow.on_speech(gw, "caller", "Thanks.")
-    assert gw.instructions[0] == prompts.ASK_NEXT.format(question="Where did this happen? Which city and state?")
-    assert gw.instructions.count(prompts.ASSESSMENT_READY) == 1
-    assert ("agent", "Where did this happen?", None) in backend.utterances
+    gw = MockCallGateway(call_id="c1", caller_id_number="+12125550100",
+                         fields={"intake_consent": "yes", "issue_summary": "My house burned down in Boston"})
+    flow.on_call_start(gw)
+    flow.on_task_complete(gw, "consent")
+    return backend, flow, gw
 
 
-def test_emergency_instruction_preempts_routing():
-    flow = flow_for(LiveBackend([{"urgency": "Emergency", "assessment_ready": False, "ask": "Where?"}]))
-    gw = MockCallGateway()
-    flow.on_speech(gw, "caller", "we're trapped")
-    assert gw.instructions == [prompts.EMERGENCY_NOW]
+def test_story_then_one_task_per_backend_question_then_connect():
+    backend, flow, gw = live_flow([
+        {"ask": "Did you or anyone else need medical treatment after this?", "ask_key": "medical"},
+        {"ask": "Were there any known problems with the property before this happened?", "ask_key": "prior_hazard"},
+        {"assessment_ready": True},
+    ])
+    backend.triage_result = triage_result("transfer")
+    assert gw.current_task == "story"
+    flow.on_task_complete(gw, "story")
+    assert gw.current_task == "q_medical"
+    gw.fields["answer"] = "Yes, smoke inhalation"
+    flow.on_task_complete(gw, "q_medical")
+    assert gw.current_task == "q_prior_hazard"
+    gw.fields["answer"] = "Yes, we told the landlord"
+    flow.on_task_complete(gw, "q_prior_hazard")
+    assert gw.current_task == "transfer_consent"  # straight to connect, no extra questions
+    # the question text was posted before each answer, so a bare yes/no is interpreted correctly
+    assert ("agent", "Did you or anyone else need medical treatment after this?", None) in backend.utterances
 
 
-def test_backend_failure_is_silent_and_never_dials():
-    flow = flow_for(LiveBackend([BackendUnavailable("timeout")]))
+def test_never_loops_even_if_backend_keeps_asking():
+    same = {"ask": "Where did this happen?", "ask_key": "location"}
+    backend, flow, gw = live_flow([same, same, same, same])
+    backend.triage_result = triage_result("human_review", referral_id=None, selected_firm=None)
+    flow.on_task_complete(gw, "story")
+    gw.fields["answer"] = "not sure"
+    flow.on_task_complete(gw, "q_location")
+    assert gw.ended_with is not None  # repeated question -> proceeds to routing, which ends the call
+
+
+def test_follow_ups_are_capped():
+    backend, flow, gw = live_flow([{"ask": f"Q{i}?", "ask_key": f"k{i}"} for i in range(6)])
+    backend.triage_result = triage_result("human_review", referral_id=None, selected_firm=None)
+    flow.on_task_complete(gw, "story")
+    for i in range(CallFlow.MAX_FOLLOW_UPS):
+        gw.fields["answer"] = "hmm"
+        flow.on_task_complete(gw, f"q_k{i}")
+    assert sum(1 for t, _ in gw.tasks if t.startswith("q_")) == CallFlow.MAX_FOLLOW_UPS
+    assert gw.ended_with is not None
+
+
+def test_emergency_goes_straight_to_routing():
+    backend, flow, gw = live_flow([{"urgency": "Emergency", "ask": "Where?", "ask_key": "location"}])
+    backend.triage_result = triage_result("emergency_guidance", referral_id=None, selected_firm=None,
+                                          next_prompt="Call 911 now.")
+    flow.on_task_complete(gw, "story")
+    assert "911" in gw.ended_with
+
+
+def test_backend_failure_still_routes_safely():
+    backend, flow, gw = live_flow([BackendUnavailable("x")])
+    backend.triage_result = BackendUnavailable("x")
+    flow.on_task_complete(gw, "story")
+    assert gw.ended_with == prompts.BACKEND_FALLBACK and gw.transfers == []
+
+
+def test_speech_relay_never_steers_the_call():
+    flow = flow_for(LiveBackend([{"ask": "Where?", "ask_key": "location", "assessment_ready": True}]))
     gw = MockCallGateway()
     flow.on_speech(gw, "caller", "hello")
-    assert gw.instructions == [] and gw.transfers == []
+    assert gw.instructions == []
 
 
 def test_classic_mode_ignores_speech():
@@ -103,42 +145,3 @@ def test_relay_debounces_partial_utterances():
     assert timers[0].cancelled and not timers[1].cancelled
     timers[1].fn()
     assert backend.utterances == [("caller", "My house burned down", "u1")]
-
-
-def test_off_script_matter_finishes_instead_of_stalling():
-    flow = flow_for(LiveBackend([{"ask": None, "assessment_ready": False, "finish_intake": True}]))
-    gw = MockCallGateway()
-    flow.on_speech(gw, "caller", "It's about a parking ticket in Ohio")
-    assert gw.instructions == [prompts.FINISH_INTAKE]
-
-
-def test_dead_backend_eventually_lets_the_agent_finish():
-    flow = flow_for(LiveBackend([BackendUnavailable("x")] * 3))
-    gw = MockCallGateway()
-    for _ in range(3):
-        flow.on_speech(gw, "caller", "hello")
-    assert gw.instructions == [prompts.FINISH_INTAKE] and gw.transfers == []
-
-
-def test_same_question_is_injected_once_even_if_backend_repeats_it():
-    q = {"ask": "Where did this happen? Which city and state?", "ask_key": "location"}
-    flow = flow_for(LiveBackend([q, q, q]))
-    gw = MockCallGateway()
-    for _ in range(3):
-        flow.on_speech(gw, "caller", "hmm")
-    assert len(gw.instructions) == 1
-
-
-def test_agent_side_success_does_not_hide_caller_failures():
-    class Mixed(LiveBackend):
-        def post_utterance(self, provider_call_id, speaker, text, utterance_id=None):
-            if speaker == "caller":
-                raise BackendUnavailable("500")
-            return {}
-
-    flow = flow_for(Mixed([]))
-    gw = MockCallGateway()
-    for _ in range(3):
-        flow.on_speech(gw, "caller", "hello")
-        flow.on_speech(gw, "agent", "Tell me more.")
-    assert gw.instructions == [prompts.FINISH_INTAKE]

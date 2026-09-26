@@ -64,8 +64,11 @@ class CallFlow:
 
     def on_task_complete(self, gw: CallGateway, task_id: str) -> None:
         handler = {"consent": self._after_consent, "triage": self._after_triage,
+                   "story": self._after_story,
                    "transfer_consent": self._after_transfer_consent,
                    "extended_intake": self._after_extended_intake}.get(task_id)
+        if handler is None and task_id.startswith("q_"):
+            handler = self._after_question
         if handler is None:
             log.warning("unknown task completed: %s", task_id)
             return
@@ -88,14 +91,13 @@ class CallFlow:
         gw.set_variable("recording_ok", True)
         if self.live:
             # Routing fields come from the live assessment; the backend steers follow-up questions.
-            # Fast path: danger and deadlines are detected from what the caller says (live assessment); the callback
-            # number comes from caller ID. Only the story is collected here; CaseLine steers the follow-ups.
-            gw.start_task("triage", prompts.LIVE_TRIAGE_OBJECTIVE, [
-                FieldSpec("issue_summary", "What happened, in the caller's own words, summarized faithfully without "
-                          "legal conclusions.", question="What happened?"),
-                FieldSpec("caller_name", "The caller's name, only if they offer it. Do not ask for it.",
-                          required=False),
-            ], completion_criteria=prompts.LIVE_COMPLETION)
+            # Fast, deterministic path: one task for the story, then one task per follow-up question chosen by the
+            # backend's live assessment, then connect. Each task has exactly one field, so the agent can't stall.
+            gw.start_task("story", prompts.LIVE_TRIAGE_OBJECTIVE, [
+                FieldSpec("issue_summary", "What happened and where (city and state), in the caller's own words, "
+                          "summarized faithfully without legal conclusions.",
+                          question="What happened, and where? Which city and state?"),
+            ])
             return
         gw.start_task("triage", prompts.TRIAGE_OBJECTIVE, [
             FieldSpec("caller_name", "The caller's name.", question="What's your name?"),
@@ -215,44 +217,56 @@ class CallFlow:
 
     # ---- live assessment -------------------------------------------------------------------------------------
     def on_speech(self, gw: CallGateway, speaker: str, text: str, utterance_id: str | None = None) -> None:
-        """Relay one (debounced) utterance; act on the backend's steering. Failures never break the call."""
+        """Relay one (debounced) utterance to the live board/transcript. Failures never affect the call."""
         if not self.live or not text.strip():
             return
         try:
             result = self.backend.post_utterance(self.provider_call_id(gw), speaker, text, utterance_id)
         except BackendError as exc:
             log.warning("live assessment unavailable: %s", type(exc).__name__)
-            if speaker != "caller":
-                return
-            # Never let the call stall on a dead backend: after repeated caller-side failures, let the agent wrap
-            # up (triage then fails safe to the human-review message).
-            failures = (gw.get_variable("assessment_failures") or 0) + 1
-            gw.set_variable("assessment_failures", failures)
-            if failures >= 3 and not gw.get_variable("ready_sent"):
-                gw.set_variable("ready_sent", True)
-                gw.send_instruction(prompts.FINISH_INTAKE)
             return
-        if speaker == "caller":
-            gw.set_variable("assessment_failures", 0)
-        if speaker != "caller":
-            return
-        if result.get("urgency") == "Emergency" and not gw.get_variable("emergency_sent"):
-            gw.set_variable("emergency_sent", True)
-            gw.set_variable("ready_sent", True)
-            gw.send_instruction(prompts.EMERGENCY_NOW)
-            return
+        # Streaming speech only feeds the live board and transcript; the call itself is driven by question tasks.
+        del result
+
+    MAX_FOLLOW_UPS = 3
+
+    def _after_story(self, gw: CallGateway) -> None:
+        story = str(gw.get_field("issue_summary") or "").strip() or "(no details given)"
+        try:
+            result = self.backend.post_utterance(self.provider_call_id(gw), "caller", story, "field-story")
+        except BackendError as exc:
+            log.warning("assessment unavailable after story: %s", type(exc).__name__)
+            result = {}
+        self._live_step(gw, result)
+
+    def _after_question(self, gw: CallGateway) -> None:
+        question = gw.get_variable("pending_question") or ""
+        answer = str(gw.get_field("answer") or "").strip() or "(no answer)"
+        pid = self.provider_call_id(gw)
+        try:
+            # Post the exact question first so a bare yes/no is interpreted against it.
+            self.backend.post_utterance(pid, "agent", question)
+            result = self.backend.post_utterance(pid, "caller", answer, f"field-{gw.get_variable('pending_key')}")
+        except BackendError as exc:
+            log.warning("assessment unavailable after follow-up: %s", type(exc).__name__)
+            result = {}
+        self._live_step(gw, result)
+
+    def _live_step(self, gw: CallGateway, result: dict) -> None:
+        """Ask the next backend-chosen question as its own task, or go straight to routing (connect)."""
         asked = gw.get_variable("asked_questions") or []
-        key = result.get("ask_key") or result.get("ask")
-        if result.get("ask") and key not in asked:
-            gw.set_variable("asked_questions", [*asked, key])
-            gw.send_instruction(prompts.ASK_NEXT.format(question=result["ask"]))
-        if not gw.get_variable("ready_sent"):
-            if result.get("assessment_ready"):
-                gw.set_variable("ready_sent", True)
-                gw.send_instruction(prompts.ASSESSMENT_READY)
-            elif result.get("finish_intake"):
-                gw.set_variable("ready_sent", True)
-                gw.send_instruction(prompts.FINISH_INTAKE)
+        key, question = result.get("ask_key"), result.get("ask")
+        done = (result.get("urgency") == "Emergency" or result.get("assessment_ready") or not key or not question
+                or key in asked or len(asked) >= self.MAX_FOLLOW_UPS)
+        log.info("live step: asked=%s next=%s ready=%s done=%s", asked, key, result.get("assessment_ready"), done)
+        if done:
+            self._after_triage(gw)
+            return
+        gw.set_variable("asked_questions", [*asked, key])
+        gw.set_variable("pending_key", key)
+        gw.set_variable("pending_question", question)
+        gw.start_task(f"q_{key}", "Ask this one question in one short sentence and record the answer. Nothing else.",
+                      [FieldSpec("answer", "The caller's answer, in their own words.", question=question)])
 
     # ---- helpers ---------------------------------------------------------------------------------------------
     def _event(self, gw: CallGateway, event_type: str, **extra) -> None:

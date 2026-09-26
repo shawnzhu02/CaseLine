@@ -2,7 +2,9 @@
 
 Interactive OpenAPI docs: run the API and open `http://127.0.0.1:8000/docs` (schema at `/openapi.json`).
 
-All `/v1` endpoints require `Authorization: Bearer <CASELINE_INTERNAL_API_TOKEN>`. Errors use
+All `/v1` endpoints require a bearer token. The voice agent uses `CASELINE_INTERNAL_API_TOKEN` (role `service`);
+people use personal tokens from `python -m caseline.cli create-principal` (roles `operator`, `admin`, `firm_user`).
+Wrong role → 403; another firm's referral → 404 (audited). Errors use
 `{"detail": {"reason": "<machine_reason>", "message": "..."}}`.
 
 | Method / path | Idempotency | Purpose |
@@ -50,3 +52,25 @@ POST /v1/intake/triage
      "requires_transfer_consent": true, "transfer_authorization": null,
      "next_prompt": "I can connect you to Demo Partner Firm A, a demonstration participant. …"}
 ```
+
+## Operator / firm endpoints (roles)
+
+| Method / path | Roles | Purpose |
+| --- | --- | --- |
+| `GET /v1/me` | any | Who the token belongs to |
+| `GET /v1/admin/cases?queue=review\|urgent\|open` | operator | Redacted case list |
+| `GET /v1/admin/cases/{id}` | operator | Full case detail (audited sensitive read); dial targets masked |
+| `POST /v1/admin/cases/{id}/status` | operator | Hold / re-route / close (state machine enforced) |
+| `PATCH /v1/admin/cases/{id}/facts` | operator | Edit facts; after sharing → new report version + one update alert |
+| `POST /v1/admin/cases/{id}/consents` | operator | Consent from a follow-up call (share consent must name the firm) |
+| `POST /v1/admin/cases/{id}/reassign` | operator | New referral to an eligible firm; old one expired |
+| `POST /v1/admin/referrals/{id}/send` | operator | Dispatch a manual referral (needs share consent for that firm) |
+| `GET/PATCH /v1/admin/firms[/{slug}]` | operator | Firm list with live availability; toggle referrals / live calls |
+| `GET /v1/admin/failures` | operator | Failed/blocked messages, unresolved transfers, unacknowledged referrals, stale data |
+| `POST /v1/admin/notifications/{id}/retry` | operator | Re-queue a failed message |
+| `POST /v1/transfer-attempts/{id}/outcome` | operator | Record connected / failed / no_answer / busy |
+| `POST /v1/referrals/{id}/status` | operator, firm_user (own firm) | accepted / declined / expired |
+| `GET /v1/firm/referrals` | firm_user (own), operator | Referrals with a shared report |
+| `GET /v1/referrals/{id}/report` | firm_user (own), operator | Latest report version (audited) |
+| `POST /v1/referrals/{id}/report-link` | firm_user (own), operator | Short-lived signed link |
+| `GET /r/{token}` | signed link | HTML report; 410 when expired/invalid; every open audited |

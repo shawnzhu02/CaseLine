@@ -19,19 +19,26 @@ transferred live (after consenting) or referred asynchronously.
 | Two demo destinations (Firm A `+12676804795`, Firm B `+16173187562`) + fictional fixture firms | **implemented** (seeded) |
 | Guava voice agent (`apps/voice`, guava-sdk 0.45.0) wired to the API | **implemented**, tested with mocks; not yet run on a live call |
 | Extended intake → pending referral → outbox (firm email, caller SMS) | **implemented**; providers **mocked** |
+| Versioned firm reports, signed expiring links, firm-isolated report API | **implemented** |
+| Roles (admin / operator / firm_user / service), encrypted caller PII, audit, rate limits, request IDs | **implemented** |
+| Operator dashboard (`apps/admin`, Next.js): review queue, case detail, transfer outcomes, firm toggles, failures | **implemented** |
+| Referral expiry + stale-transfer sweeps | **implemented** (outbox worker) |
+| Deployment (Render Blueprint: API, worker, voice agent, dashboard, Postgres) | **configured**, not yet deployed |
 | Guava SMS | **blocked** until SMS capability + STOP handling of the sender number are verified (`GUAVA_SMS_ENABLED=false`) |
-| Transfer connect/fail detection | **blocked by SDK** (no events); operator records the outcome |
-| Report builder/storage/firm portal (Phase 3), admin UI + RBAC (Phase 4) | **not started** |
-| Live transfers to the demo numbers | **manual-demo-only** — see `docs/demo-runbook.md` |
+| Transfer connect/fail detection | **blocked by SDK** (no events); operator records the outcome in the dashboard |
+| Real partner firms, launch state, legal review | **needs partner/legal decision**, see `docs/launch-decisions.md` |
+| Live transfers to the demo numbers | **manual-demo-only**, see `docs/demo-runbook.md` |
 
 ## Layout
 
 ```text
-apps/api/        FastAPI backend (caseline/), Alembic migrations, pytest suite
-apps/voice/      Guava voice agent: main.py, caseline_voice/ (flow, backend client, Guava adapter)
+apps/api/        FastAPI backend (caseline/), Alembic migrations, pytest suite, Dockerfile, CLI
+apps/voice/      Guava voice agent: main.py, caseline_voice/ (flow, backend client, Guava adapter), Dockerfile
+apps/admin/      Operator dashboard (Next.js 16, server-rendered; operators sign in with personal tokens)
 scripts/         seed_demo.py, smoke_demo.py (mock end-to-end demo), reset_dev_db.ps1
-docs/            architecture, API contract, demo runbook, ADRs
+docs/            architecture, API contract, deployment, demo runbook, Guava questions, launch decisions, ADRs
 compose.yaml     local Postgres
+render.yaml      Render Blueprint for staging/demo
 ```
 
 ## Local development (Windows PowerShell)
@@ -79,7 +86,7 @@ Stop Postgres: `docker compose down`. Reset the local schema + reseed: `.\script
 ## Tests and mock demo
 
 ```powershell
-cd apps\api;  .\.venv\Scripts\Activate.ps1;  ruff check . ..\..\scripts;  pytest -q      # 70 passed
+cd apps\api;  .\.venv\Scripts\Activate.ps1;  ruff check . ..\..\scripts;  pytest -q      # 92 passed
 cd ..\..
 python scripts\smoke_demo.py --scenario all       # scripted call through the real flow + API, no real calls
 
@@ -90,6 +97,22 @@ ruff check .; pytest -q                                                         
 
 Unit tests use in-memory SQLite and mock gateways; CI (`.github/workflows/ci.yml`) also migrates and seeds a
 Postgres 16 service. Nothing in tests, CI or `smoke_demo.py` can dial, text or email.
+
+## Operator dashboard
+
+```powershell
+cd apps\api; .\.venv\Scripts\Activate.ps1
+python -m caseline.cli create-principal --name you --role operator     # prints your token once
+cd ..\admin
+npm ci
+$env:CASELINE_API_BASE_URL = "http://127.0.0.1:8000"
+npm run dev                  # http://localhost:3000, sign in with the token
+npm run typecheck; npm test  # 3 session-sealing tests
+```
+
+Queues (needs review / urgent / open), full case detail (audited), record transfer outcomes and firm decisions,
+reassign with fresh consent, open the firm report, toggle firm availability, and retry failed messages.
+Deployment: `docs/deployment.md`.
 
 ## Voice agent
 

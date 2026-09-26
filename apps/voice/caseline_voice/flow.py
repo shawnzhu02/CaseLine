@@ -88,18 +88,13 @@ class CallFlow:
         gw.set_variable("recording_ok", True)
         if self.live:
             # Routing fields come from the live assessment; the backend steers follow-up questions.
+            # Fast path: danger and deadlines are detected from what the caller says (live assessment); the callback
+            # number comes from caller ID. Only the story is collected here; CaseLine steers the follow-ups.
             gw.start_task("triage", prompts.LIVE_TRIAGE_OBJECTIVE, [
-                FieldSpec("issue_summary", "Let the caller explain what happened in their own words. Summarize it "
-                          "faithfully as the caller's account, without legal conclusions."),
-                FieldSpec("immediate_danger", "Whether anyone is in immediate physical danger right now.",
-                          "multiple_choice", question="Is anyone in immediate danger right now?", choices=YES_NO),
-                FieldSpec("deadline", "Any court date, hearing or deadline the caller has been told about, in their "
-                          "words. Do not calculate or estimate deadlines.", required=False,
-                          question="Have you been told about any court dates or deadlines?"),
-                FieldSpec("caller_name", "The caller's name.", question="What's your name?"),
-                FieldSpec("callback_number", "The best phone number to reach the caller, confirmed digit by digit.",
-                          question="What's the best number to reach you?"),
-                prompts.TRIAGE_READ_BACK,
+                FieldSpec("issue_summary", "What happened, in the caller's own words, summarized faithfully without "
+                          "legal conclusions.", question="What happened?"),
+                FieldSpec("caller_name", "The caller's name, only if they offer it. Do not ask for it.",
+                          required=False),
             ], completion_criteria=prompts.LIVE_COMPLETION)
             return
         gw.start_task("triage", prompts.TRIAGE_OBJECTIVE, [
@@ -130,8 +125,10 @@ class CallFlow:
             "provider_call_id": self.provider_call_id(gw),
             "caller": {
                 "name": gw.get_field("caller_name"),
-                "callback_number": normalize_phone(gw.get_field("callback_number"), self.region),
-                "callback_confirmed": True,  # read back per TRIAGE_READ_BACK
+                # Live mode doesn't ask: fall back to caller ID (unverified, so not marked confirmed).
+                "callback_number": normalize_phone(gw.get_field("callback_number") or
+                                                   (gw.caller_id_number if self.live else None), self.region),
+                "callback_confirmed": not self.live,  # classic mode reads it back (TRIAGE_READ_BACK)
                 "preferred_language": "en",
             },
             "facts": {
@@ -152,10 +149,9 @@ class CallFlow:
         gw.set_variable("firm_name", result.selected_firm.display_name if result.selected_firm else None)
         gw.set_variable("questions", [q.model_dump() for q in result.extended_intake_questions])
         if result.action == "transfer" and result.referral_id and result.selected_firm:
-            gw.start_task("transfer_consent", "Offer the transfer and record the caller's decision.", [
-                SaySpec(result.next_prompt),
-                FieldSpec("transfer_consent", "Whether the caller wants to be transferred to the named firm now.",
-                          "multiple_choice", choices=YES_NO),
+            gw.start_task("transfer_consent", "Offer the transfer in one sentence; record the answer. Nothing else.", [
+                FieldSpec("transfer_consent", "Whether the caller wants to be connected now.", "multiple_choice",
+                          question=result.next_prompt, choices=YES_NO),
             ])
         elif result.action == "extended_intake" and result.referral_id:
             self._start_extended(gw, result, "after_hours")

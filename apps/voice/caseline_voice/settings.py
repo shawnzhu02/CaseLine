@@ -30,7 +30,7 @@ class VoiceSettings(BaseSettings):
     voice_live_assessment: bool = False
     # Permanent Guava WebRTC code so people can talk to the agent from a browser (judge demo page).
     guava_webrtc_code: str | None = None
-    speech_debounce_seconds: float = 0.9
+    speech_debounce_seconds: float = 0.6
 
     @property
     def transfer_allowlist(self) -> frozenset[str]:

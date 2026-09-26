@@ -43,9 +43,7 @@ TRIAGE_READ_BACK = (
 )
 
 TRANSFER_HANDOFF = (
-    "Tell the caller you're connecting them with {display_name} now, that the firm will decide independently "
-    "whether it can help, and then transfer. Do not summarize or repeat any case details during the transfer, "
-    "and do not read out the phone number."
+    "Say only \"Connecting you now.\" and transfer immediately. Do not repeat case details or read out any number."
 )
 
 EXTENDED_OBJECTIVE = (
@@ -54,22 +52,17 @@ EXTENDED_OBJECTIVE = (
 )
 
 LIVE_TRIAGE_OBJECTIVE = (
-    "Let the caller explain their situation in their own words. CaseLine will send you follow-up questions; ask "
-    "each one naturally, one at a time, with empathy. Never tell the caller what type of case they have, never "
-    "give legal advice, and never name a lawyer or firm yourself."
+    "Keep this call fast: one short sentence per turn, no summaries, no read-backs, no questions of your own. "
+    "Ask \"What happened?\", then ask only the follow-up questions CaseLine sends you, one at a time, with a brief "
+    "word of empathy at most. Never tell the caller what type of case they have, never give legal advice, and never "
+    "name a lawyer or firm yourself."
 )
-LIVE_COMPLETION = (
-    "Complete this task only after CaseLine has told you ASSESSMENT_READY (or told you to finish) and you have "
-    "the caller's name and a confirmed callback number."
-)
-ASK_NEXT = "CaseLine follow-up: when there is a natural pause, ask the caller: \"{question}\""
-ASSESSMENT_READY = (
-    "ASSESSMENT_READY: CaseLine has identified the type of legal help that may be relevant. If you do not yet "
-    "have the caller's name and a confirmed callback number, ask for them now, then complete the task."
-)
+LIVE_COMPLETION = "Complete this task as soon as CaseLine tells you ASSESSMENT_READY or tells you to finish."
+ASK_NEXT = "CaseLine follow-up: ask the caller now, in one short sentence: \"{question}\""
+ASSESSMENT_READY = "ASSESSMENT_READY: complete the task now. Do not ask anything else."
 FINISH_INTAKE = (
-    "CaseLine has what it needs for now. If you do not yet have the caller's name and a confirmed callback number, "
-    "ask for them now, then complete the task. Do not name a type of case or a lawyer."
+    "CaseLine has what it needs for now. Ask for the caller's name if you don't have it, then complete the task. "
+    "Do not name a type of case or a lawyer."
 )
 EMERGENCY_NOW = (
     "The caller may be in immediate danger. Tell them clearly to hang up and call 911 right now, then complete "

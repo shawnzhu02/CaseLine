@@ -174,13 +174,12 @@ def triage(session: Session, req: TriageRequest, settings: Settings, now: dateti
     session.add(referral)
     session.flush()
     selected = SelectedFirm(firm_id=firm.slug, display_name=firm.display_name, is_demo=firm.is_demo)
-    label = f"{firm.display_name}, a demonstration participant" if firm.is_demo else firm.display_name
+    label = firm.display_name  # demo firm names already carry "(demo)"
 
     if match.kind == "transfer":
         set_case_status(session, case, CaseStatus.TRANSFER_PENDING)
         return finish(RoutingAction.TRANSFER, CaseStatus.TRANSFER_PENDING,
-                      f"I can connect you to {label}. They will decide independently whether they can help. "
-                      "Would you like me to transfer you?",
+                      f"I can connect you now with {label}, who will decide if they can help. Shall I connect you?",
                       ["ask_transfer_consent", "authorize_transfer", "extended_intake_if_declined"],
                       referral_id=referral.id, selected_firm=selected,
                       availability_source=match.availability_source, questions=_extended_questions(area))

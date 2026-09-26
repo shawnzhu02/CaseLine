@@ -82,7 +82,7 @@ def test_happy_path_dials_exact_backend_destination():
     assert len(gw.transfers) == 1
     dest, instructions = gw.transfers[0]
     assert dest == FIRM_A
-    assert "Demo Partner Firm A" in instructions and FIRM_A not in instructions
+    assert "Connecting you now" in instructions and FIRM_A not in instructions
     triage_payload = backend.calls[1][1]
     assert triage_payload["facts"]["practice_area"] == "DEMO_AREA_A"
     assert triage_payload["caller"]["callback_number"] == "+12125550100"

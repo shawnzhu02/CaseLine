@@ -26,7 +26,10 @@ numbers or anything the caller said. The full case, with contact details and aud
 ## Outputs on a real call
 
 - **Firm open + caller agrees:** the API authorizes a transfer only when `DEMO_LIVE_TRANSFER_ENABLED=true`. The agent
-  then transfers through Guava to Demo Partner Firm A (**267-680-4795**), and the board shows **CONNECTING…**.
+  then transfers through Guava to the matched demo firm, and the board shows **CONNECTING…**. For this deployment
+  **both Demo Partner Firm A and B ring +1 617-318-7562**. 267-680-4795 is removed from the live allowlist
+  (`DEMO_FIRM_A_TRANSFER_NUMBER`, `DEMO_FIRM_B_TRANSFER_NUMBER` and `DEMO_TRANSFER_ALLOWLIST` on the API, plus
+  `VOICE_TRANSFER_ALLOWLIST` in `apps/voice/.env`).
   **This is OFF until both demo lawyers confirm they will take calls.** Enable it as below.
 - **Otherwise** (flag off, caller declines, or firm closed): the agent asks a few follow-ups plus share/text
   permission, then CaseLine creates the referral. The board shows the **drafted email** to the firm. Email sending is

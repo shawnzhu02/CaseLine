@@ -38,6 +38,8 @@ def post_utterance(provider_call_id: str, body: UtteranceIn, request: Request,
                                   settings=settings, extractor=request.app.state.extractor, now=clock(),
                                   utterance_id=body.utterance_id)
     call, row = live._get_or_create(session, provider_call_id, clock())
+    if settings.live_transcript_enabled:
+        live.purge_transcripts(session, settings, clock())
     # Always return the current question; the agent de-duplicates, so a lost response never loses a question.
     from caseline.services.assessment import QUESTIONS
 

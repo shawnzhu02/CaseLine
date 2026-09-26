@@ -39,7 +39,7 @@ export default function DemoPage() {
               {" "}or <a href={webrtc} target="_blank" rel="noopener noreferrer">talk to it in your browser</a>
             </>
           )}
-          . Use invented details only. This page shows only CaseLine&apos;s assessment of the latest call (no names, numbers or words spoken).
+          . Use invented details only: during the demo, what you say appears in the live transcript on this page (kept for 30 minutes, then deleted).
         </p>
         <p className="demo-fine">
           Demo participants: the lawyers shown are demo participants for this presentation, and every live transfer

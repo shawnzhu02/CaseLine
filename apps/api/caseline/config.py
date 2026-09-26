@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # Public judge page may show the most recent REAL call's non-identifying assessment (demo line only).
     public_demo_show_live_calls: bool = False
     public_demo_window_minutes: int = 30
+    # Demo only: keep what was said on a call for the live board, then purge it. Refused in production.
+    live_transcript_enabled: bool = False
+    live_transcript_retention_minutes: int = 30
 
     # Comma-separated origins allowed to call the API from a browser (the admin dashboard calls server-side).
     cors_allow_origins: str = ""
@@ -127,6 +130,8 @@ class Settings(BaseSettings):
             raise ConfigError("DEMO_LIVE_TRANSFER_ENABLED=true is invalid unless DEMO_MODE=true")
         if self.app_env == "test" and self.guava_mode == "live":
             raise ConfigError("APP_ENV=test may never use GUAVA_MODE=live")
+        if self.app_env == "production" and self.live_transcript_enabled:
+            raise ConfigError("LIVE_TRANSCRIPT_ENABLED is a demo feature and is refused in production")
         if self.app_env == "production" and (self.demo_mode or self.demo_simulate_firm_availability):
             raise ConfigError("Demo flags must be off in production")
         demo_numbers = {self.demo_firm_a_transfer_number, self.demo_firm_b_transfer_number,

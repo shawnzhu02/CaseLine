@@ -73,3 +73,38 @@ def test_public_latest_is_off_by_default_and_never_shows_simulations(make_harnes
     say(on, "caller", "My house burned down in Boston.")
     snap = on.get("/v1/live/public-latest", as_="operator").json()
     assert snap["category"] == "Property / Insurance" and snap["jurisdiction"] == "Massachusetts"
+
+
+def test_transcript_off_by_default(h):
+    say(h, "caller", "My house burned down.")
+    assert h.get("/v1/live/current", as_="operator").json()["transcript"] == []
+
+
+def test_live_transcript_when_enabled_and_purged_after_window(make_harness):
+    from datetime import timedelta
+
+    h = make_harness(live_transcript_enabled=True)
+    say(h, "agent", "CaseLine here. Okay to continue?")
+    h.post(f"/v1/calls/{CALL}/utterances", {"speaker": "caller", "text": "My house", "utterance_id": "u1"})
+    h.post(f"/v1/calls/{CALL}/utterances", {"speaker": "caller", "text": "My house burned down", "utterance_id": "u1"})
+    t = h.get("/v1/live/current", as_="operator").json()["transcript"]
+    assert t == [{"speaker": "agent", "text": "CaseLine here. Okay to continue?"},
+                 {"speaker": "caller", "text": "My house burned down"}]
+    h.clock.now += timedelta(minutes=h.settings.live_transcript_retention_minutes + 1)
+    say(h, "caller", "hello", call="guava-other-call")  # any new activity triggers the purge
+    with h.db.sessionmaker() as s:
+        from caseline.models import CallAssessment, CallSession
+
+        old = s.query(CallAssessment).join(CallSession).filter(CallSession.provider_call_id == CALL).one()
+        assert old.transcript is None
+
+
+def test_transcript_refused_in_production():
+    import pytest
+    from pydantic import ValidationError
+
+    from caseline.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, app_env="production", live_transcript_enabled=True,
+                 caseline_internal_api_token="x" * 20, caseline_field_encryption_key="k", report_link_secret="s")

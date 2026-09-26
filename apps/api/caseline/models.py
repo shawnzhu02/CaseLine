@@ -342,6 +342,8 @@ class CallAssessment(TimestampMixin, Base):
     last_question: Mapped[str | None] = mapped_column(String(32))
     asked_question: Mapped[str | None] = mapped_column(String(32))
     utterances_processed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Demo-only live transcript (LIVE_TRANSCRIPT_ENABLED); purged after LIVE_TRANSCRIPT_RETENTION_MINUTES.
+    transcript: Mapped[list | None] = mapped_column(JSONType, nullable=True)
     # Set explicitly from the request clock by the live service (no ORM onupdate), so "active in the last N
     # minutes" windows follow the same clock as everything else.
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow, nullable=False)

@@ -82,9 +82,36 @@ def _flat(view: dict) -> dict:
     return {**view, "match_name": (view.get("match") or {}).get("display_name")}
 
 
+def _record_transcript(row: CallAssessment, speaker: str, text: str, utterance_id: str | None,
+                       now: datetime) -> None:
+    lines = list(row.transcript or [])
+    entry = {"speaker": speaker, "text": text[:500], "at": now.isoformat(), "id": utterance_id}
+    if utterance_id and lines and lines[-1].get("id") == utterance_id:
+        lines[-1] = entry  # a longer re-send of the same utterance replaces the partial
+    else:
+        lines.append(entry)
+    row.transcript = lines[-60:]
+
+
+def purge_transcripts(session: Session, settings: Settings, now: datetime) -> int:
+    """Delete demo transcripts for calls idle longer than the retention window."""
+    from datetime import timedelta
+
+    from sqlalchemy import update
+
+    cutoff = now - timedelta(minutes=settings.live_transcript_retention_minutes)
+    result = session.execute(update(CallAssessment).where(CallAssessment.transcript.is_not(None),
+                                                          CallAssessment.updated_at < cutoff)
+                             .values(transcript=None))
+    return result.rowcount or 0
+
+
 def process_utterance(session: Session, *, provider_call_id: str, speaker: str, text: str, settings: Settings,
                       extractor, now: datetime, utterance_id: str | None = None) -> dict:
     call, row = _get_or_create(session, provider_call_id, now)
+    row.updated_at = now  # any speech (caller or agent) counts as activity
+    if settings.live_transcript_enabled:
+        _record_transcript(row, speaker, text, utterance_id, now)
     if speaker == "agent":
         # Unrelated agent speech clears the context, so a later "yes" can't land on a stale question.
         row.last_question = A.question_for_text(text)
@@ -217,6 +244,7 @@ def snapshot(session: Session, call: CallSession, row: CallAssessment) -> dict:
         "next_question": view.get("next_question"),
         "history": row.history,
         "outcome": outcome(session, call, row),
+        "transcript": [{"speaker": t["speaker"], "text": t["text"]} for t in (row.transcript or [])],
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 

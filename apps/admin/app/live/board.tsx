@@ -23,6 +23,7 @@ type Snapshot = {
   action?: string | null;
   history?: Change[];
   outcome?: Outcome | null;
+  transcript?: { speaker: "caller" | "agent"; text: string }[];
 };
 
 const ROWS: [label: string, key: "jurisdiction" | "category" | "matter" | "urgency"][] = [
@@ -43,6 +44,7 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
   const [running, setRunning] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const failures = useRef(0);
+  const transcriptEnd = useRef<HTMLDivElement | null>(null);
   const prev = useRef<Snapshot | null>(null);
   const callRef = useRef<string | null>(null);
 
@@ -131,6 +133,13 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
   const cls = (key: string) => (flash.has(key) ? "live-value flash-on" : "live-value");
   const connecting = snap.status.startsWith("CONNECTING");
   const out = snap.outcome;
+  // Live transcript from the server when available; otherwise the lines of the scripted demo being played.
+  const convo: [string, string][] = snap.transcript?.length
+    ? snap.transcript.map((t) => [t.speaker, t.text])
+    : lines;
+  useEffect(() => {
+    transcriptEnd.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [convo.length]);
 
   return (
     <div className="live">
@@ -201,12 +210,18 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
               </div>
             </div>
           )}
-          {lines.length > 0 && (
-            <div className="live-box">
-              <div className="live-label">Conversation (scripted demo; real calls are never shown or stored)</div>
-              {lines.map(([s, t], i) => <p key={i}><b>{s === "caller" ? "Caller" : "CaseLine"}:</b> {t}</p>)}
+          <div className="live-box">
+            <div className="live-label">Live transcript</div>
+            <div className="live-transcript">
+              {convo.length === 0 && <p className="live-muted">Waiting for the conversation to start…</p>}
+              {convo.map(([s, t], i) => (
+                <p key={i} className={s === "caller" ? "t-caller" : "t-agent"}>
+                  <b>{s === "caller" ? "Caller" : "CaseLine"}:</b> {t}
+                </p>
+              ))}
+              <div ref={transcriptEnd} />
             </div>
-          )}
+          </div>
           <div className="live-box">
             <div className="live-label">What CaseLine was thinking</div>
             <ol className="live-trail">
@@ -290,5 +305,7 @@ const LIVE_CSS = `
 .live-email-meta span{display:inline-block;width:70px;color:var(--mute)}
 .live-email pre{white-space:pre-wrap;font:inherit;background:#121211;border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px}
 .live-problem{background:rgba(244,200,106,.12);color:var(--hot);border:1px solid rgba(244,200,106,.4);border-radius:8px;padding:8px 12px;margin-bottom:12px}
+.live-transcript{max-height:320px;overflow-y:auto;margin-top:6px;padding-right:6px}
+.live-transcript .t-agent b{color:var(--acc)}.live-transcript .t-caller b{color:var(--hot)}
 .live-foot{margin-top:20px;color:var(--mute);font-size:13px}
 `;

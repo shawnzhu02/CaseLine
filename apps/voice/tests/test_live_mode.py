@@ -103,3 +103,42 @@ def test_relay_debounces_partial_utterances():
     assert timers[0].cancelled and not timers[1].cancelled
     timers[1].fn()
     assert backend.utterances == [("caller", "My house burned down", "u1")]
+
+
+def test_off_script_matter_finishes_instead_of_stalling():
+    flow = flow_for(LiveBackend([{"ask": None, "assessment_ready": False, "finish_intake": True}]))
+    gw = MockCallGateway()
+    flow.on_speech(gw, "caller", "It's about a parking ticket in Ohio")
+    assert gw.instructions == [prompts.FINISH_INTAKE]
+
+
+def test_dead_backend_eventually_lets_the_agent_finish():
+    flow = flow_for(LiveBackend([BackendUnavailable("x")] * 3))
+    gw = MockCallGateway()
+    for _ in range(3):
+        flow.on_speech(gw, "caller", "hello")
+    assert gw.instructions == [prompts.FINISH_INTAKE] and gw.transfers == []
+
+
+def test_same_question_is_injected_once_even_if_backend_repeats_it():
+    q = {"ask": "Where did this happen? Which city and state?", "ask_key": "location"}
+    flow = flow_for(LiveBackend([q, q, q]))
+    gw = MockCallGateway()
+    for _ in range(3):
+        flow.on_speech(gw, "caller", "hmm")
+    assert len(gw.instructions) == 1
+
+
+def test_agent_side_success_does_not_hide_caller_failures():
+    class Mixed(LiveBackend):
+        def post_utterance(self, provider_call_id, speaker, text, utterance_id=None):
+            if speaker == "caller":
+                raise BackendUnavailable("500")
+            return {}
+
+    flow = flow_for(Mixed([]))
+    gw = MockCallGateway()
+    for _ in range(3):
+        flow.on_speech(gw, "caller", "hello")
+        flow.on_speech(gw, "agent", "Tell me more.")
+    assert gw.instructions == [prompts.FINISH_INTAKE]

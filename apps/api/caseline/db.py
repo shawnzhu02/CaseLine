@@ -44,6 +44,8 @@ def make_engine(database_url: str) -> Engine:
             kwargs["poolclass"] = StaticPool
     else:
         kwargs["pool_pre_ping"] = True
+        # Poolers such as Neon's PgBouncer (transaction mode) break server-side prepared statements.
+        kwargs["connect_args"] = {"prepare_threshold": None}
     engine = create_engine(database_url, **kwargs)
     if engine.dialect.name == "sqlite":
 

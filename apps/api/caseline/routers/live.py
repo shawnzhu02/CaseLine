@@ -35,17 +35,22 @@ def post_utterance(provider_call_id: str, body: UtteranceIn, request: Request,
                    clock: Callable[[], datetime] = Depends(get_clock)):
     """Process one utterance. The text is used in memory only; only extracted facts are stored."""
     snap = live.process_utterance(session, provider_call_id=provider_call_id, speaker=body.speaker, text=body.text,
-                                  settings=settings, extractor=request.app.state.extractor, now=clock())
+                                  settings=settings, extractor=request.app.state.extractor, now=clock(),
+                                  utterance_id=body.utterance_id)
     call, row = live._get_or_create(session, provider_call_id, clock())
-    ask = None
-    if body.speaker == "caller" and live.mark_question_asked(row, snap["next_question"]):
-        from caseline.services.assessment import QUESTIONS
+    # Always return the current question; the agent de-duplicates, so a lost response never loses a question.
+    from caseline.services.assessment import QUESTIONS
 
-        ask = QUESTIONS[snap["next_question"]][0]
+    ask = QUESTIONS[snap["next_question"]][0] if body.speaker == "caller" and snap["next_question"] else None
     row.updated_at = clock()
     session.commit()
-    return {**snap, "ask": ask,
-            "assessment_ready": snap["ready"] and snap["urgency"] != "Emergency"}
+    ready = snap["ready"] and snap["urgency"] != "Emergency"
+    # Nothing left to ask but no routable category (off-script matter), or a long call: finish intake anyway;
+    # triage then routes to human review instead of the agent waiting for a match that will never come.
+    stalled = (not ready and snap["urgency"] != "Emergency" and snap["next_question"] is None
+               and row.utterances_processed >= 3) or row.utterances_processed >= 12
+    return {**snap, "ask": ask, "ask_key": snap["next_question"] if ask else None, "assessment_ready": ready,
+            "finish_intake": bool(ready or stalled)}
 
 
 class SimulatedUtterance(StrictModel):

@@ -20,10 +20,16 @@ def build_extractor(settings: Settings):
     """Claude fact extractor for live assessment, or None (rules only)."""
     if not settings.assessment_llm_enabled:
         return None
-    from caseline.services.assessment import ClaudeExtractor
+    import logging
 
-    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
-    return ClaudeExtractor(settings.assessment_model, settings.assessment_timeout_seconds, api_key=key)
+    try:
+        from caseline.services.assessment import ClaudeExtractor
+
+        key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
+        return ClaudeExtractor(settings.assessment_model, settings.assessment_timeout_seconds, api_key=key)
+    except Exception as exc:  # e.g. SDK not installed or no credentials: fall back to rules, never fail startup
+        logging.getLogger("caseline").warning("Claude extractor disabled: %s", type(exc).__name__)
+        return None
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None,

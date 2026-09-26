@@ -95,7 +95,18 @@ _NO = re.compile(r"^\s*(no|nope|nah|not really|we didn't|i didn't|none)\b", re.I
 
 
 def _has(text: str, *words: str) -> bool:
-    return any(re.search(rf"\b{w}", text) for w in words)
+    """Whole words/phrases only ("fire" must not match "fired")."""
+    return any(re.search(rf"\b{re.escape(w)}\b", text) for w in words)
+
+
+def _stem(text: str, *stems: str) -> bool:
+    """Word prefixes, for stems like "injur" (injury, injured) or "evict" (eviction)."""
+    return any(re.search(rf"\b{re.escape(w)}", text) for w in stems)
+
+
+# Longest names first so "west virginia" wins over "virginia".
+_STATES_BY_LENGTH = sorted(US_STATES.items(), key=lambda kv: -len(kv[0]))
+_EXTRA_STATE_PATTERNS = {"washington dc": "DC", "washington, dc": "DC", "d.c.": "DC"}
 
 
 def rule_extract(utterance: str, last_question: str | None) -> dict[str, Any]:
@@ -103,10 +114,15 @@ def rule_extract(utterance: str, last_question: str | None) -> dict[str, Any]:
     t = utterance.lower()
     out: dict[str, Any] = {}
 
-    for name, code in US_STATES.items():
-        if re.search(rf"\b{name}\b", t):
+    for pattern, code in _EXTRA_STATE_PATTERNS.items():
+        if pattern in t:
             out["state"] = code
             break
+    else:
+        for name, code in _STATES_BY_LENGTH:
+            if re.search(rf"\b{name}\b", t):
+                out["state"] = code
+                break
     m = re.search(r"\b([a-z][a-z .'-]{1,30}),\s*(?:[a-z .]+)$", t.strip(" ."))
     if m and "state" in out:
         out["city"] = m.group(1).strip().title()
@@ -115,37 +131,37 @@ def rule_extract(utterance: str, last_question: str | None) -> dict[str, Any]:
             out.setdefault("state", code)
             out.setdefault("city", city.title())
 
-    if _has(t, "burn", "fire", "smoke damage", "went up in flames"):
-        out["incident"] = "residential_fire" if _has(t, "house", "home", "apartment", "building", "our place") \
-            else out.get("incident", "residential_fire")
+    if _has(t, "fire", "fires", "on fire", "caught fire", "burned", "burnt", "burning", "burned down",
+            "smoke damage", "went up in flames"):
+        out["incident"] = "residential_fire"
         out["property_damage"] = True
     if _has(t, "everything is gone", "lost everything", "burned down", "total loss", "destroyed"):
         out["property_damage"] = True
         out["total_loss"] = True
-    if _has(t, "car accident", "crash", "rear-ended", "hit by a car", "collision"):
+    if _has(t, "car accident", "crash", "crashed", "rear-ended", "hit by a car", "collision"):
         out["incident"] = "vehicle_accident"
-    if _has(t, "evict", "notice to quit", "kicked out"):
+    if _stem(t, "evict") or _has(t, "notice to quit", "kicked out"):
         out["incident"] = "eviction"
         out["tenant"] = True
-    if _has(t, "insurance", "insurer", "claim"):
+    if _has(t, "insurance", "insurer", "claim", "claims"):
         out["insurance_involved"] = True
         if _has(t, "denied", "refused", "won't pay", "rejected"):
-            out["incident"] = out.get("incident", "insurance_denial")
-    if _has(t, "hospital", "emergency room", " er ", "ambulance", "doctor", "treated", "treatment"):
+            out.setdefault("incident", "insurance_denial")
+    if _has(t, "hospital", "emergency room", "er", "ambulance", "doctor", "treated", "treatment", "urgent care"):
         out["medical_treatment"] = True
         out["injury"] = True
-    if _has(t, "injur", "hurt", "burns on", "smoke inhalation", "broke my", "broken"):
+    if _stem(t, "injur") or _has(t, "hurt", "burns", "smoke inhalation", "broke my", "broken bone"):
         out["injury"] = True
-    if _has(t, "landlord"):
+    if _has(t, "landlord", "landlords", "property manager"):
         out["responsible_party"] = "landlord"
         out["tenant"] = True
-    if _has(t, "sparking", "faulty", "wiring", "outlet", "leak", "broken stair", "hazard", "smoke detector",
-            "problem with", "problems with"):
+    if _has(t, "sparking", "sparked", "faulty", "wiring", "outlet", "outlets", "leak", "leaking", "broken stair",
+            "hazard", "smoke detector", "smoke detectors", "problem with", "problems with"):
         if _has(t, "told", "reported", "complained", "notified", "already", "warned", "asked them to fix"):
             out["prior_hazard_reported"] = True
             if "responsible_party" in out:
                 out["responsible_party_notified"] = True
-    if _has(t, "we rent", "i rent", "renting", "tenant", "my lease"):
+    if _has(t, "we rent", "i rent", "renting", "tenant", "tenants", "my lease"):
         out["tenant"] = True
     if _has(t, "we own", "i own", "homeowner", "my own house"):
         out["tenant"] = False
@@ -154,7 +170,7 @@ def rule_extract(utterance: str, last_question: str | None) -> dict[str, Any]:
     if _has(t, "danger right now", "still on fire", "trapped", "being attacked", "not safe right now"):
         out["immediate_danger"] = True
 
-    # Bare yes/no answers apply to the question the agent just asked.
+    # Bare yes/no answers apply only to the question the agent asked immediately before.
     if last_question in QUESTIONS:
         targets = QUESTIONS[last_question][1]
         if _YES.search(t):
@@ -181,7 +197,8 @@ class ClaudeExtractor:
         import anthropic  # optional at import time so tests/CI never need it
 
         self._anthropic = anthropic
-        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout_seconds, max_retries=1)
+        # No retries: the voice agent's request budget is short, and rules already cover the utterance.
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout_seconds, max_retries=0)
         self.model = model
 
     @staticmethod
@@ -228,6 +245,8 @@ class ClaudeExtractor:
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
+            return {}
+        if not isinstance(data, dict):
             return {}
         clean: dict[str, Any] = {}
         for key, value in data.items():
@@ -343,18 +362,18 @@ def merge_facts(current: dict[str, Any], *deltas: dict[str, Any]) -> tuple[dict[
 
 
 def question_for_text(agent_text: str) -> str | None:
-    """Map what our agent just said to a known question key (for yes/no interpretation)."""
+    """Map what our agent just said to a known question key (for yes/no interpretation). None = unrelated."""
     t = agent_text.lower()
-    if _has(t, "where did this happen", "which city", "what state", "where did it happen"):
+    if _has(t, "in danger", "are you safe", "is everyone safe"):
+        return "danger"
+    if _has(t, "court date", "court dates", "deadline", "deadlines", "hearing"):
+        return "deadline"
+    if _has(t, "where did this happen", "where did it happen", "which city", "what city", "what state"):
         return "location"
-    if _has(t, "medical", "hospital", "treatment", "injur", "hurt"):
-        return "medical"
     if _has(t, "known problems", "problems with the property", "reported them", "before the fire", "before this"):
         return "prior_hazard"
     if _has(t, "rent or own"):
         return "tenant"
-    if _has(t, "in danger"):
-        return "danger"
-    if _has(t, "court date", "deadline"):
-        return "deadline"
+    if _has(t, "medical", "hospital", "treatment", "treated", "doctor") or _stem(t, "injur"):
+        return "medical"
     return None

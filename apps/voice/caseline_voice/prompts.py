@@ -72,6 +72,10 @@ ASSESSMENT_READY = (
     "ASSESSMENT_READY: CaseLine has identified the type of legal help that may be relevant. If you do not yet "
     "have the caller's name and a confirmed callback number, ask for them now, then complete the task."
 )
+FINISH_INTAKE = (
+    "CaseLine has what it needs for now. If you do not yet have the caller's name and a confirmed callback number, "
+    "ask for them now, then complete the task. Do not name a type of case or a lawyer."
+)
 EMERGENCY_NOW = (
     "The caller may be in immediate danger. Tell them clearly to hang up and call 911 right now, then complete "
     "the task."

@@ -113,7 +113,9 @@ def triage(session: Session, req: TriageRequest, settings: Settings, now: dateti
     # A ready live assessment supplies jurisdiction/category when the agent did not send them (live mode).
     from caseline.services.live import assessed_routing
 
-    assessed_j, assessed_area = assessed_routing(session, call.id)
+    assessed_j, assessed_area, assessed_deadline = assessed_routing(session, call.id)
+    if assessed_deadline and not facts.caller_reported_deadline:
+        facts = facts.model_copy(update={"caller_reported_deadline": "caller mentioned a date or deadline"})
     if assessed_j and not facts.jurisdiction:
         facts = facts.model_copy(update={"jurisdiction": assessed_j})
     if assessed_area and not facts.practice_area:

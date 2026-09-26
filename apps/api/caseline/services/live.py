@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseline.config import Settings
@@ -23,11 +24,17 @@ def _get_or_create(session: Session, provider_call_id: str, now: datetime) -> tu
         call = CallSession(provider_call_id=provider_call_id, started_at=now)
         session.add(call)
         session.flush()
-    row = session.scalar(select(CallAssessment).where(CallAssessment.call_session_id == call.id))
+    q = select(CallAssessment).where(CallAssessment.call_session_id == call.id)
+    if session.get_bind().dialect.name == "postgresql":
+        q = q.with_for_update()  # serialize concurrent utterances for the same call
+    row = session.scalar(q)
     if row is None:
-        row = CallAssessment(call_session_id=call.id, facts={}, view={}, history=[], version=0)
-        session.add(row)
-        session.flush()
+        try:
+            with session.begin_nested():
+                row = CallAssessment(call_session_id=call.id, facts={}, view={}, history=[], version=0)
+                session.add(row)
+        except IntegrityError:  # another request created it first
+            row = session.scalar(q)
     return call, row
 
 
@@ -76,21 +83,26 @@ def _flat(view: dict) -> dict:
 
 
 def process_utterance(session: Session, *, provider_call_id: str, speaker: str, text: str, settings: Settings,
-                      extractor, now: datetime) -> dict:
+                      extractor, now: datetime, utterance_id: str | None = None) -> dict:
     call, row = _get_or_create(session, provider_call_id, now)
     if speaker == "agent":
-        q = A.question_for_text(text)
-        if q:
-            row.last_question = q
+        # Unrelated agent speech clears the context, so a later "yes" can't land on a stale question.
+        row.last_question = A.question_for_text(text)
         return snapshot(session, call, row)
 
     delta_rules = A.rule_extract(text, row.last_question)
     delta_llm: dict = {}
     if extractor is not None:
         question_text = A.QUESTIONS.get(row.last_question or "", (None, []))[0]
-        delta_llm = extractor.extract(text, question_text, row.facts)
+        try:
+            delta_llm = extractor.extract(text, question_text, row.facts)
+        except Exception:  # extractor bugs must never break the call; rules still apply
+            delta_llm = {}
     facts, changed = A.merge_facts(row.facts, delta_rules, delta_llm)
-    row.utterances_processed += 1
+    row.last_question = None  # the answer has been used
+    last_id = (row.view or {}).get("last_utterance_id")
+    if not (utterance_id and utterance_id == last_id):  # a re-sent partial of the same utterance counts once
+        row.utterances_processed += 1
 
     assessment = A.assess(facts)
     view = _derive_view(assessment, _match(session, assessment, settings, now))
@@ -101,19 +113,14 @@ def process_utterance(session: Session, *, provider_call_id: str, speaker: str, 
         if before.get(key) != after.get(key):
             history.append({"step": step, "at": now.isoformat(), "field": label, "from": before.get(key),
                             "to": after.get(key), "reason": assessment.reasons.get(key.replace("_label", ""))})
+    view["last_utterance_id"] = utterance_id
+    view["deadline_mentioned"] = bool(facts.get("deadline_mentioned"))
     if changed or history != row.history:
-        row.facts, row.view, row.history = facts, view, history
+        row.facts, row.history = facts, history
         row.version += 1
+    row.view = view
     row.updated_at = now  # use the request clock (tests + consistent "last active" windows)
     return snapshot(session, call, row)
-
-
-def mark_question_asked(row: CallAssessment, key: str | None) -> bool:
-    """True when this question hasn't been sent to the agent yet (so the agent is steered once per question)."""
-    if not key or row.asked_question == key:
-        return False
-    row.asked_question = key
-    return True
 
 
 def _email_draft(template: str, firm_name: str, ref: str) -> dict:
@@ -196,6 +203,7 @@ def snapshot(session: Session, call: CallSession, row: CallAssessment) -> dict:
     view = row.view or {}
     return {
         "call_id": call.provider_call_id[-6:],  # short reference for display; never caller identity
+        "simulated": call.provider_call_id.startswith("sim-"),
         "version": row.version,
         "status": _status(session, call, row),
         "jurisdiction": view.get("jurisdiction_label"),
@@ -225,16 +233,23 @@ def latest_real_since(session: Session, since) -> dict | None:
 
 
 def latest(session: Session) -> dict | None:
-    row = session.scalars(select(CallAssessment).order_by(CallAssessment.updated_at.desc())).first()
-    if row is None:
-        return None
-    call = session.get(CallSession, row.call_session_id)
-    return snapshot(session, call, row)
+    """Operator board: latest real call or operator rehearsal. Public judge runs never take over this board."""
+    rows = session.scalars(select(CallAssessment).order_by(CallAssessment.updated_at.desc()).limit(20)).all()
+    for row in rows:
+        call = session.get(CallSession, row.call_session_id)
+        if not call.provider_call_id.startswith("sim-judge-"):
+            return snapshot(session, call, row)
+    return None
 
 
-def assessed_routing(session: Session, call_session_id) -> tuple[str | None, str | None]:
-    """(jurisdiction, practice_area) from a ready live assessment, for triage to use when the agent sent none."""
+def assessed_routing(session: Session, call_session_id) -> tuple[str | None, str | None, bool]:
+    """(jurisdiction, practice_area, deadline_mentioned) from the live assessment, for triage to use when the agent
+    sent none. The deadline flag applies even if the assessment isn't ready, so deadlines always escalate."""
     row = session.scalar(select(CallAssessment).where(CallAssessment.call_session_id == call_session_id))
-    if row is None or not (row.view or {}).get("ready"):
-        return None, None
-    return row.view.get("jurisdiction"), row.view.get("routing_area") or row.view.get("category")
+    if row is None:
+        return None, None, False
+    view = row.view or {}
+    deadline = bool(view.get("deadline_mentioned"))
+    if not view.get("ready"):
+        return None, None, deadline
+    return view.get("jurisdiction"), view.get("routing_area") or view.get("category"), deadline

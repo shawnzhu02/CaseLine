@@ -11,6 +11,7 @@ type Outcome =
   | { type: "email"; firm: string; status: string; simulated: boolean; subject: string; body: string };
 type Snapshot = {
   call_id?: string;
+  simulated?: boolean;
   version: number;
   status: string;
   jurisdiction?: string | null;
@@ -40,6 +41,8 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
   const [flash, setFlash] = useState<Set<string>>(new Set());
   const [lines, setLines] = useState<[string, string][]>([]);
   const [running, setRunning] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const failures = useRef(0);
   const prev = useRef<Snapshot | null>(null);
   const callRef = useRef<string | null>(null);
 
@@ -56,7 +59,14 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
       try {
         const res = await fetch(url, { cache: "no-store" });
         if (res.status === 401 && !isPublic) window.location.href = "/login";
-        if (!res.ok || !alive) return;
+        if (!alive) return;
+        if (!res.ok) {
+          failures.current += 1;
+          if (failures.current >= 3) setProblem("Connection problem, retrying…");
+          return;
+        }
+        failures.current = 0;
+        setProblem(null);
         const next: Snapshot = await res.json();
         const before = prev.current;
         if (before && next.call_id === before.call_id) {
@@ -72,7 +82,10 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
         }
         prev.current = next;
         setSnap(next);
-      } catch {}
+      } catch {
+        failures.current += 1;
+        if (failures.current >= 3 && alive) setProblem("Connection problem, retrying…");
+      }
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -95,8 +108,17 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
     try {
       for (const [i, line] of SCRIPTS[variant].entries()) {
         setLines((l) => [...l, [line.speaker, line.text]]);
-        if (isPublic) await playDemoLine(callId, variant, i);
-        else await simulateLine(callId, line.speaker, line.text, line.outcome ?? null);
+        let ok = true;
+        try {
+          if (isPublic) ok = (await playDemoLine(callId, variant, i)).ok;
+          else await simulateLine(callId, line.speaker, line.text, line.outcome ?? null);
+        } catch {
+          ok = false;
+        }
+        if (!ok) {
+          setProblem("The demo service is busy. Please press play again.");
+          break;
+        }
         await new Promise((r) => setTimeout(r, line.speaker === "caller" ? 3200 : 1800));
       }
     } finally {
@@ -117,9 +139,9 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
         <div>
           <div className="live-brand">CASELINE — LIVE ASSESSMENT</div>
           <div className="live-sub">
-            {source === "live"
-              ? snap.call_id ? `Live call …${snap.call_id}` : "Listening for a live call on the demo line"
-              : "Simulated call: scripted demo, invented caller"}
+            {(isPublic ? source === "script" : snap.simulated)
+              ? "Simulated call: scripted demo, invented caller"
+              : snap.call_id ? `Live call …${snap.call_id}` : "Listening for a live call on the demo line"}
           </div>
         </div>
         <div className={`live-status ${connecting ? "connecting" : ""} ${flash.has("status") ? "flash-on" : ""}`}>
@@ -127,6 +149,7 @@ export function LiveBoard({ mode = "operator" }: { mode?: "operator" | "public" 
         </div>
       </div>
 
+      {problem && <div className="live-problem" role="status">{problem}</div>}
       <div className="live-controls">
         <button type="button" onClick={() => play("connect")} disabled={running}>
           {running ? "Call in progress…" : "▶ Play demo call (firm open: live transfer)"}
@@ -266,5 +289,6 @@ const LIVE_CSS = `
 .live-email-meta{display:grid;gap:4px;margin:10px 0}
 .live-email-meta span{display:inline-block;width:70px;color:var(--mute)}
 .live-email pre{white-space:pre-wrap;font:inherit;background:#121211;border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px}
+.live-problem{background:rgba(244,200,106,.12);color:var(--hot);border:1px solid rgba(244,200,106,.4);border-radius:8px;padding:8px 12px;margin-bottom:12px}
 .live-foot{margin-top:20px;color:var(--mute);font-size:13px}
 `;

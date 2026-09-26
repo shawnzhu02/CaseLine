@@ -93,6 +93,9 @@ class CallFlow:
                           "faithfully as the caller's account, without legal conclusions."),
                 FieldSpec("immediate_danger", "Whether anyone is in immediate physical danger right now.",
                           "multiple_choice", question="Is anyone in immediate danger right now?", choices=YES_NO),
+                FieldSpec("deadline", "Any court date, hearing or deadline the caller has been told about, in their "
+                          "words. Do not calculate or estimate deadlines.", required=False,
+                          question="Have you been told about any court dates or deadlines?"),
                 FieldSpec("caller_name", "The caller's name.", question="What's your name?"),
                 FieldSpec("callback_number", "The best phone number to reach the caller, confirmed digit by digit.",
                           question="What's the best number to reach you?"),
@@ -223,18 +226,36 @@ class CallFlow:
             result = self.backend.post_utterance(self.provider_call_id(gw), speaker, text, utterance_id)
         except BackendError as exc:
             log.warning("live assessment unavailable: %s", type(exc).__name__)
+            if speaker != "caller":
+                return
+            # Never let the call stall on a dead backend: after repeated caller-side failures, let the agent wrap
+            # up (triage then fails safe to the human-review message).
+            failures = (gw.get_variable("assessment_failures") or 0) + 1
+            gw.set_variable("assessment_failures", failures)
+            if failures >= 3 and not gw.get_variable("ready_sent"):
+                gw.set_variable("ready_sent", True)
+                gw.send_instruction(prompts.FINISH_INTAKE)
             return
+        if speaker == "caller":
+            gw.set_variable("assessment_failures", 0)
         if speaker != "caller":
             return
         if result.get("urgency") == "Emergency" and not gw.get_variable("emergency_sent"):
             gw.set_variable("emergency_sent", True)
             gw.send_instruction(prompts.EMERGENCY_NOW)
             return
-        if result.get("ask"):
+        asked = gw.get_variable("asked_questions") or []
+        key = result.get("ask_key") or result.get("ask")
+        if result.get("ask") and key not in asked:
+            gw.set_variable("asked_questions", [*asked, key])
             gw.send_instruction(prompts.ASK_NEXT.format(question=result["ask"]))
-        if result.get("assessment_ready") and not gw.get_variable("ready_sent"):
-            gw.set_variable("ready_sent", True)
-            gw.send_instruction(prompts.ASSESSMENT_READY)
+        if not gw.get_variable("ready_sent"):
+            if result.get("assessment_ready"):
+                gw.set_variable("ready_sent", True)
+                gw.send_instruction(prompts.ASSESSMENT_READY)
+            elif result.get("finish_intake"):
+                gw.set_variable("ready_sent", True)
+                gw.send_instruction(prompts.FINISH_INTAKE)
 
     # ---- helpers ---------------------------------------------------------------------------------------------
     def _event(self, gw: CallGateway, event_type: str, **extra) -> None:
@@ -256,6 +277,16 @@ class SpeechRelay:
         self._timer_factory = timer_factory or (lambda d, fn: threading.Timer(d, fn))
         self._pending: dict[str, Any] = {}
         self._lock = threading.Lock()
+        self._call_locks: dict[str, threading.Lock] = {}
+
+    def _call_lock(self, call_id: str) -> threading.Lock:
+        with self._lock:
+            return self._call_locks.setdefault(call_id, threading.Lock())
+
+    def _post(self, gw: CallGateway, speaker: str, text: str, utterance_id: str | None) -> None:
+        # One post at a time per call, in order, so fact updates never race each other.
+        with self._call_lock(gw.call_id):
+            self.flow.on_speech(gw, speaker, text, utterance_id)
 
     def caller(self, gw: CallGateway, text: str, utterance_id: str | None) -> None:
         key = f"{gw.call_id}:{utterance_id or 'none'}"
@@ -263,7 +294,7 @@ class SpeechRelay:
         def fire() -> None:
             with self._lock:
                 self._pending.pop(key, None)
-            self.flow.on_speech(gw, "caller", text, utterance_id)
+            self._post(gw, "caller", text, utterance_id)
 
         with self._lock:
             old = self._pending.pop(key, None)
@@ -274,4 +305,4 @@ class SpeechRelay:
         timer.start()
 
     def agent(self, gw: CallGateway, text: str) -> None:
-        threading.Thread(target=self.flow.on_speech, args=(gw, "agent", text), daemon=True).start()
+        threading.Thread(target=self._post, args=(gw, "agent", text, None), daemon=True).start()

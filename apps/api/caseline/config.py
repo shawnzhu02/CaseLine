@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     assessment_llm_enabled: bool = False
     anthropic_api_key: SecretStr | None = None
     assessment_model: str = "claude-sonnet-5"
-    assessment_timeout_seconds: float = 6.0
+    assessment_timeout_seconds: float = 4.0  # must stay well under the voice client's timeout
     # Public judge page may show the most recent REAL call's non-identifying assessment (demo line only).
     public_demo_show_live_calls: bool = False
     public_demo_window_minutes: int = 30

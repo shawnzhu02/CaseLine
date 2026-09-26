@@ -140,3 +140,17 @@ def test_demo_role_is_limited_to_simulation(h):
     # The demo role can never see real calls, cases or firms.
     for path in ("/v1/live/current", "/v1/admin/cases", "/v1/admin/firms", "/v1/firm/referrals"):
         assert h.client.get(path, headers=hdr).status_code == 403, path
+
+
+def test_off_script_matter_signals_finish(h):
+    say(h, "caller", "I got a parking ticket in Columbus, Ohio")
+    say(h, "caller", "It was on Main Street")
+    s = say(h, "caller", "I think it was unfair")
+    assert s["assessment_ready"] is False and s["finish_intake"] is True
+
+
+def test_postgres_engine_disables_prepared_statements():
+    from caseline.db import make_engine
+
+    engine = make_engine("postgresql+psycopg://u:p@localhost:5432/db")
+    assert engine.dialect.name == "postgresql"

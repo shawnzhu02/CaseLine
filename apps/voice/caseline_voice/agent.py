@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import guava
-from guava.events import BotSessionEnded
+from guava.events import AgentSpeechEvent, BotSessionEnded, CallerSpeechEvent
 
 from caseline_voice import prompts
 from caseline_voice.backend_client import CaseLineBackend
-from caseline_voice.flow import CallFlow
+from caseline_voice.flow import CallFlow, SpeechRelay
 from caseline_voice.settings import VoiceSettings
 from caseline_voice.telecom import GuavaCallGateway
 
@@ -15,7 +15,9 @@ from caseline_voice.telecom import GuavaCallGateway
 def build_agent(settings: VoiceSettings | None = None) -> guava.Agent:
     settings = settings or VoiceSettings()
     backend = CaseLineBackend(settings.caseline_api_base_url, settings.caseline_internal_api_token.get_secret_value())
-    flow = CallFlow(backend, settings.transfer_allowlist, settings.default_phone_region)
+    flow = CallFlow(backend, settings.transfer_allowlist, settings.default_phone_region,
+                    live_assessment=settings.voice_live_assessment)
+    relay = SpeechRelay(flow, settings.speech_debounce_seconds)
 
     agent = guava.Agent(name=prompts.AGENT_NAME, organization=prompts.ORGANIZATION, purpose=prompts.PURPOSE)
 
@@ -26,6 +28,17 @@ def build_agent(settings: VoiceSettings | None = None) -> guava.Agent:
     @agent.on_task_complete
     def on_task_complete(call: guava.Call, task_id: str) -> None:
         flow.on_task_complete(GuavaCallGateway(call), task_id)
+
+    if settings.voice_live_assessment:
+
+        @agent.on_caller_speech
+        def on_caller_speech(call: guava.Call, event: CallerSpeechEvent) -> None:
+            relay.caller(GuavaCallGateway(call), event.utterance, event.utterance_id)
+
+        @agent.on_agent_speech
+        def on_agent_speech(call: guava.Call, event: AgentSpeechEvent) -> None:
+            if not event.interrupted:
+                relay.agent(GuavaCallGateway(call), event.utterance)
 
     @agent.on_session_end
     def on_session_end(call: guava.Call, event: BotSessionEnded) -> None:

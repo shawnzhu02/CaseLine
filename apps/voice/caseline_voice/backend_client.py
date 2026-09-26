@@ -87,6 +87,11 @@ class CaseLineBackend:
                           f"{provider_call_id}:extended-intake:v1")
         return self._parse(ExtendedIntakeResult, data)
 
+    def post_utterance(self, provider_call_id: str, speaker: str, text: str,
+                       utterance_id: str | None = None) -> dict:
+        return self._post(f"/v1/calls/{provider_call_id}/utterances",
+                          {"speaker": speaker, "text": text[:2000], "utterance_id": utterance_id})
+
     def post_event(self, provider_call_id: str, event_type: str, event_id: str, **extra) -> None:
         self._post("/v1/calls/events", {"provider_event_id": event_id, "provider_call_id": provider_call_id,
                                         "event_type": event_type, **extra})

@@ -33,12 +33,14 @@ class CallGateway(Protocol):
     def call_id(self) -> str: ...
     @property
     def caller_id_number(self) -> str | None: ...
-    def start_task(self, task_id: str, objective: str, checklist: list[ChecklistItem]) -> None: ...
+    def start_task(self, task_id: str, objective: str, checklist: list[ChecklistItem],
+                   completion_criteria: str = "") -> None: ...
     def get_field(self, key: str) -> Any: ...
     def set_variable(self, key: str, value: Any) -> None: ...
     def get_variable(self, key: str, default: Any = None) -> Any: ...
     def transfer(self, authorized_destination: str, instructions: str) -> None: ...
     def end_call(self, final_instructions: str) -> None: ...
+    def send_instruction(self, instruction: str) -> None: ...
 
 
 class GuavaCallGateway:
@@ -56,7 +58,11 @@ class GuavaCallGateway:
         # Caller ID may be absent (anonymous) and is never treated as verified.
         return getattr(self._call.call_info, "from_number", None)
 
-    def start_task(self, task_id: str, objective: str, checklist: list[ChecklistItem]) -> None:
+    def send_instruction(self, instruction: str) -> None:
+        self._call.send_instruction(instruction)
+
+    def start_task(self, task_id: str, objective: str, checklist: list[ChecklistItem],
+                   completion_criteria: str = "") -> None:
         import guava
 
         items: list = []
@@ -74,7 +80,7 @@ class GuavaCallGateway:
                 items.append(guava.Say(item.text))
             else:
                 items.append(item)
-        self._call.set_task(task_id, objective=objective, checklist=items)
+        self._call.set_task(task_id, objective=objective, checklist=items, completion_criteria=completion_criteria)
 
     def get_field(self, key: str) -> Any:
         return self._call.get_field(key)
@@ -105,9 +111,14 @@ class MockCallGateway:
     tasks: list[tuple[str, list[ChecklistItem]]] = field(default_factory=list)
     transfers: list[tuple[str, str]] = field(default_factory=list)
     ended_with: str | None = None
+    instructions: list[str] = field(default_factory=list)
 
-    def start_task(self, task_id: str, objective: str, checklist: list[ChecklistItem]) -> None:
+    def start_task(self, task_id: str, objective: str, checklist: list[ChecklistItem],
+                   completion_criteria: str = "") -> None:
         self.tasks.append((task_id, checklist))
+
+    def send_instruction(self, instruction: str) -> None:
+        self.instructions.append(instruction)
 
     def get_field(self, key: str) -> Any:
         return self.fields.get(key)

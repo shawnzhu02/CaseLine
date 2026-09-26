@@ -58,6 +58,25 @@ EXTENDED_OBJECTIVE = (
     "distressed or wants to stop, stop asking questions. Record 'declined' if they prefer not to answer."
 )
 
+LIVE_TRIAGE_OBJECTIVE = (
+    "Let the caller explain their situation in their own words. CaseLine will send you follow-up questions; ask "
+    "each one naturally, one at a time, with empathy. Never tell the caller what type of case they have, never "
+    "give legal advice, and never name a lawyer or firm yourself."
+)
+LIVE_COMPLETION = (
+    "Complete this task only after CaseLine has told you ASSESSMENT_READY (or told you to finish) and you have "
+    "the caller's name and a confirmed callback number."
+)
+ASK_NEXT = "CaseLine follow-up: when there is a natural pause, ask the caller: \"{question}\""
+ASSESSMENT_READY = (
+    "ASSESSMENT_READY: CaseLine has identified the type of legal help that may be relevant. If you do not yet "
+    "have the caller's name and a confirmed callback number, ask for them now, then complete the task."
+)
+EMERGENCY_NOW = (
+    "The caller may be in immediate danger. Tell them clearly to hang up and call 911 right now, then complete "
+    "the task."
+)
+
 BACKEND_FALLBACK = (
     "I'm sorry, I'm having trouble reaching our system right now, so I can't connect you to a firm on this call. "
     "A member of our team will review what you've shared and follow up. No lawyer has been arranged yet."

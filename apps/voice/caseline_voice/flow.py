@@ -7,6 +7,8 @@ relays backend prompts, asks for consent and dials the exact backend-authorized,
 from __future__ import annotations
 
 import logging
+import threading
+from collections.abc import Callable
 from typing import Any
 
 import phonenumbers
@@ -38,10 +40,12 @@ def normalize_phone(raw: Any, region: str) -> str | None:
 
 
 class CallFlow:
-    def __init__(self, backend: CaseLineBackend, transfer_allowlist: frozenset[str], phone_region: str = "US"):
+    def __init__(self, backend: CaseLineBackend, transfer_allowlist: frozenset[str], phone_region: str = "US",
+                 live_assessment: bool = False):
         self.backend = backend
         self.allowlist = transfer_allowlist
         self.region = phone_region
+        self.live = live_assessment
 
     # ---- lifecycle -------------------------------------------------------------------------------------------
     @staticmethod
@@ -82,6 +86,19 @@ class CallFlow:
             gw.end_call(prompts.CONSENT_DECLINED)
             return
         gw.set_variable("recording_ok", _yes(gw.get_field("recording_ok")))
+        if self.live:
+            # Routing fields come from the live assessment; the backend steers follow-up questions.
+            gw.start_task("triage", prompts.LIVE_TRIAGE_OBJECTIVE, [
+                FieldSpec("issue_summary", "Let the caller explain what happened in their own words. Summarize it "
+                          "faithfully as the caller's account, without legal conclusions."),
+                FieldSpec("immediate_danger", "Whether anyone is in immediate physical danger right now.",
+                          "multiple_choice", question="Is anyone in immediate danger right now?", choices=YES_NO),
+                FieldSpec("caller_name", "The caller's name.", question="What's your name?"),
+                FieldSpec("callback_number", "The best phone number to reach the caller, confirmed digit by digit.",
+                          question="What's the best number to reach you?"),
+                prompts.TRIAGE_READ_BACK,
+            ], completion_criteria=prompts.LIVE_COMPLETION)
+            return
         gw.start_task("triage", prompts.TRIAGE_OBJECTIVE, [
             FieldSpec("caller_name", "The caller's name.", question="What's your name?"),
             FieldSpec("issue_summary", "Let the caller explain what happened in their own words. Summarize it "
@@ -197,6 +214,28 @@ class CallFlow:
                                               consents, gw.get_variable("extended_reason", "after_hours"))
         gw.end_call(f"Say this to the caller: {result.next_prompt}")
 
+    # ---- live assessment -------------------------------------------------------------------------------------
+    def on_speech(self, gw: CallGateway, speaker: str, text: str, utterance_id: str | None = None) -> None:
+        """Relay one (debounced) utterance; act on the backend's steering. Failures never break the call."""
+        if not self.live or not text.strip():
+            return
+        try:
+            result = self.backend.post_utterance(self.provider_call_id(gw), speaker, text, utterance_id)
+        except BackendError as exc:
+            log.warning("live assessment unavailable: %s", type(exc).__name__)
+            return
+        if speaker != "caller":
+            return
+        if result.get("urgency") == "Emergency" and not gw.get_variable("emergency_sent"):
+            gw.set_variable("emergency_sent", True)
+            gw.send_instruction(prompts.EMERGENCY_NOW)
+            return
+        if result.get("ask"):
+            gw.send_instruction(prompts.ASK_NEXT.format(question=result["ask"]))
+        if result.get("assessment_ready") and not gw.get_variable("ready_sent"):
+            gw.set_variable("ready_sent", True)
+            gw.send_instruction(prompts.ASSESSMENT_READY)
+
     # ---- helpers ---------------------------------------------------------------------------------------------
     def _event(self, gw: CallGateway, event_type: str, **extra) -> None:
         try:
@@ -204,3 +243,35 @@ class CallFlow:
                                     f"{self.provider_call_id(gw)}:{event_type}", **extra)
         except BackendError as exc:
             log.warning("could not record %s: %s", event_type, type(exc).__name__)
+
+
+class SpeechRelay:
+    """Debounces caller speech (Guava re-sends a growing utterance under the same id) and posts it off the SDK's
+    event thread, so a slow API call never stalls the conversation."""
+
+    def __init__(self, flow: CallFlow, delay_seconds: float,
+                 timer_factory: Callable[[float, Callable[[], None]], Any] | None = None) -> None:
+        self.flow = flow
+        self.delay = delay_seconds
+        self._timer_factory = timer_factory or (lambda d, fn: threading.Timer(d, fn))
+        self._pending: dict[str, Any] = {}
+        self._lock = threading.Lock()
+
+    def caller(self, gw: CallGateway, text: str, utterance_id: str | None) -> None:
+        key = f"{gw.call_id}:{utterance_id or 'none'}"
+
+        def fire() -> None:
+            with self._lock:
+                self._pending.pop(key, None)
+            self.flow.on_speech(gw, "caller", text, utterance_id)
+
+        with self._lock:
+            old = self._pending.pop(key, None)
+            if old is not None:
+                old.cancel()
+            timer = self._timer_factory(self.delay, fire)
+            self._pending[key] = timer
+        timer.start()
+
+    def agent(self, gw: CallGateway, text: str) -> None:
+        threading.Thread(target=self.flow.on_speech, args=(gw, "agent", text), daemon=True).start()

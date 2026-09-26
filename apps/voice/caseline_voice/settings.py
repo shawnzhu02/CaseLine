@@ -25,6 +25,12 @@ class VoiceSettings(BaseSettings):
     # Defense in depth: even a backend-authorized destination is dialed only if it is also listed here.
     voice_transfer_allowlist: str = "+12676804795,+16173187562"
     default_phone_region: str = "US"
+    # Live assessment: stream caller speech to the API, let it pick follow-up questions and the routing
+    # (jurisdiction/category). Off = the classic fixed checklist with multiple-choice routing fields.
+    voice_live_assessment: bool = False
+    # Permanent Guava WebRTC code so people can talk to the agent from a browser (judge demo page).
+    guava_webrtc_code: str | None = None
+    speech_debounce_seconds: float = 0.9
 
     @property
     def transfer_allowlist(self) -> frozenset[str]:

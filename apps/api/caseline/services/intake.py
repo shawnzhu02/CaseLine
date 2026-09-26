@@ -110,8 +110,20 @@ def triage(session: Session, req: TriageRequest, settings: Settings, now: dateti
     for key, value in facts.model_dump(exclude_none=True).items():
         session.add(CaseFact(case_id=case.id, key=key, value=value, provenance=FactProvenance.CALLER_STATED))
 
+    # A ready live assessment supplies jurisdiction/category when the agent did not send them (live mode).
+    from caseline.services.live import assessed_routing
+
+    assessed_j, assessed_area = assessed_routing(session, call.id)
+    if assessed_j and not facts.jurisdiction:
+        facts = facts.model_copy(update={"jurisdiction": assessed_j})
+    if assessed_area and not facts.practice_area:
+        facts = facts.model_copy(update={"practice_area": assessed_area})
+        session.add(CaseFact(case_id=case.id, key="assessed_practice_area", value=assessed_area,
+                             provenance=FactProvenance.INFERRED))
     case.jurisdiction = facts.jurisdiction
     area, confidence = classify(facts.practice_area, facts.issue_summary)
+    if assessed_area and facts.practice_area == assessed_area:
+        confidence = "live_assessment"
     case.practice_area = area
     case.practice_area_confidence = confidence
 

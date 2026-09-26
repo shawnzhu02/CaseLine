@@ -120,7 +120,7 @@ def triage_body(call_id: str, practice_area: str | None, jurisdiction: str | Non
 
 @pytest.fixture
 def make_harness() -> Callable[..., Harness]:
-    def _make(now: datetime = DAYTIME, **overrides) -> Harness:
+    def _make(now: datetime = DAYTIME, extractor=None, **overrides) -> Harness:
         values = {"app_env": "test", "database_url": "sqlite://", "caseline_internal_api_token": TOKEN,
                   "guava_mode": "mock", "demo_mode": True, "demo_live_transfer_enabled": False,
                   "rate_limit_per_minute": 0}
@@ -137,7 +137,7 @@ def make_harness() -> Callable[..., Harness]:
                 s.add(ApiPrincipal(name=name, role=role, firm_id=firm, token_hash=hash_token(PERSONAL_TOKENS[name])))
             s.commit()
         clock = Clock(now)
-        app = create_app(settings, db, clock)
+        app = create_app(settings, db, clock, extractor=extractor)
         return Harness(TestClient(app), settings, db, clock,
                        Gateways(sms=MockGuavaSmsGateway(), email=MockEmailGateway()))
 

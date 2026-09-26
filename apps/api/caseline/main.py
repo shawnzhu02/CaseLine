@@ -13,11 +13,21 @@ from caseline.config import Settings, get_settings
 from caseline.db import Database
 from caseline.middleware import RateLimitMiddleware, RequestIdMiddleware
 from caseline.models import utcnow
-from caseline.routers import admin, calls, health, intake, operations, referrals
+from caseline.routers import admin, calls, health, intake, live, operations, referrals
+
+
+def build_extractor(settings: Settings):
+    """Claude fact extractor for live assessment, or None (rules only)."""
+    if not settings.assessment_llm_enabled:
+        return None
+    from caseline.services.assessment import ClaudeExtractor
+
+    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
+    return ClaudeExtractor(settings.assessment_model, settings.assessment_timeout_seconds, api_key=key)
 
 
 def create_app(settings: Settings | None = None, database: Database | None = None,
-               clock: Callable[[], datetime] | None = None) -> FastAPI:
+               clock: Callable[[], datetime] | None = None, extractor=None) -> FastAPI:
     settings = settings or get_settings()
     crypto.configure(settings.caseline_field_encryption_key.get_secret_value()
                      if settings.caseline_field_encryption_key else None)
@@ -26,6 +36,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     app.state.settings = settings
     app.state.database = database or Database(settings.database_url)
     app.state.clock = clock or utcnow
+    app.state.extractor = extractor if extractor is not None else build_extractor(settings)
     app.add_middleware(RateLimitMiddleware, per_minute=settings.rate_limit_per_minute,
                        report_links_per_minute=settings.report_link_rate_limit_per_minute)
     origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
@@ -34,7 +45,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
                            allow_headers=["Authorization", "Content-Type", "Idempotency-Key"])
     app.add_middleware(RequestIdMiddleware)
     for r in (health.router, intake.router, referrals.router, calls.router, admin.router, operations.router,
-              operations.public):
+              live.router, operations.public):
         app.include_router(r)
     return app
 

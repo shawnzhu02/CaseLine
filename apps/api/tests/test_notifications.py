@@ -10,9 +10,8 @@ from tests.conftest import NIGHT
 
 
 def _after_hours_referral(h, *, sms=True, share=True, callback="+12125550100"):
-    tri = h.triage("c1", sms=sms, share=share, callback=callback).json()
-    r = h.post(f"/v1/referrals/{tri['referral_id']}/extended-intake",
-               {"provider_call_id": "c1", "reason": "after_hours", "facts": {}}, key="c1:extended:v1")
+    tri = h.triage("c1", callback=callback).json()
+    r = h.extended(tri["referral_id"], "c1", share=share, sms=sms)
     assert r.status_code == 200, r.text
     return tri, r.json()
 
@@ -111,10 +110,10 @@ def test_firm_accept_and_decline_are_distinct(make_harness):
     h = make_harness(now=NIGHT)
     tri, _ = _after_hours_referral(h, sms=False)
     _run(h)
-    r = h.post(f"/v1/referrals/{tri['referral_id']}/status", {"status": "accepted", "actor": "operator-1"})
+    r = h.post(f"/v1/referrals/{tri['referral_id']}/status", {"status": "accepted"})
     assert r.status_code == 200
     assert r.json() == {"referral_id": tri["referral_id"], "status": "accepted", "case_status": "firm_accepted"}
-    again = h.post(f"/v1/referrals/{tri['referral_id']}/status", {"status": "declined", "actor": "operator-1"})
+    again = h.post(f"/v1/referrals/{tri['referral_id']}/status", {"status": "declined"})
     assert again.status_code == 409
     with h.db.sessionmaker() as s:
         assert s.query(Case).one().status == "firm_accepted"

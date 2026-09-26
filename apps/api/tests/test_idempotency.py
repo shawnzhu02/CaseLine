@@ -44,7 +44,8 @@ def test_duplicate_extended_intake_creates_one_referral_and_one_notification(mak
     h = make_harness(now=NIGHT)
     tri = h.triage("c1", sms=True).json()
     body = {"provider_call_id": "c1", "reason": "after_hours",
-            "facts": {"event_date": {"value": "last week"}}}
+            "facts": {"event_date": {"value": "last week"}},
+            "consents": {"intake": True, "share_with_selected_firm": True, "sms": True}}
     a = h.post(f"/v1/referrals/{tri['referral_id']}/extended-intake", body, key="c1:extended:v1")
     b = h.post(f"/v1/referrals/{tri['referral_id']}/extended-intake", body, key="c1:extended:v1")
     assert a.status_code == b.status_code == 200
@@ -69,7 +70,7 @@ def test_caller_disconnect_mid_intake_keeps_consented_partial_case(make_harness)
 
 def test_invalid_transition_returns_409_and_is_audited(h):
     tri = h.triage("c1").json()
-    r = h.post(f"/v1/referrals/{tri['referral_id']}/status", {"status": "accepted", "actor": "op1"})
+    r = h.post(f"/v1/referrals/{tri['referral_id']}/status", {"status": "accepted"})
     assert r.status_code == 409
     from caseline.models import AuditEvent
 

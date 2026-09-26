@@ -98,3 +98,8 @@ export async function updateFirm(form: FormData) {
 export async function retryNotification(form: FormData) {
   await run("/failures", "Message re-queued", () => post(`/v1/admin/notifications/${str(form, "id")}/retry`, {}));
 }
+
+export async function simulateLine(callId: string, speaker: "caller" | "agent", text: string,
+                                   outcome: "connect" | "refer" | null = null) {
+  return post("/v1/live/simulate", { call_id: callId, speaker, text, outcome });
+}

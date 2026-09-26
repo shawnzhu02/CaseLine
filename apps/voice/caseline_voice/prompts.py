@@ -14,15 +14,10 @@ PURPOSE = (
     "local emergency number) before anything else."
 )
 
-NOTICE = (
-    "Thanks for calling CaseLine. I'm an AI intake assistant, not a lawyer, and CaseLine is a referral service, "
-    "not a law firm. I can take some details and try to connect you with a participating firm. This call is "
-    "handled by our voice provider and may be recorded and transcribed."
-)
+# Kept deliberately short: AI disclosure, not-a-lawyer, recording notice, one consent question.
+NOTICE = "Hi, this is CaseLine, an AI legal intake assistant, not a lawyer. This call may be recorded."
 
-CONSENT_QUESTION = (
-    "Is it okay for me to collect some information about your situation so we can try to find a participating firm?"
-)
+CONSENT_QUESTION = "Is it okay if I ask a few questions to find you the right help?"
 
 # Human-friendly labels the model chooses from -> backend codes. None means "unknown" (backend routes to review).
 JURISDICTION_CHOICES: dict[str, str | None] = {

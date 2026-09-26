@@ -57,10 +57,9 @@ class CallFlow:
         gw.start_task("consent", prompts.TRIAGE_OBJECTIVE, [
             SaySpec(prompts.NOTICE),
             "If the caller says anyone is in immediate danger, tell them to hang up and call 911 right away.",
-            FieldSpec("intake_consent", "Whether the caller agrees to share information.", "multiple_choice",
+            FieldSpec("intake_consent", "Whether the caller agrees to continue (covers the recording notice and "
+                      "collecting their details). Ask once, briefly.", "multiple_choice",
                       question=prompts.CONSENT_QUESTION, choices=YES_NO),
-            FieldSpec("recording_ok", "Whether the caller is okay with the call being recorded and transcribed.",
-                      "multiple_choice", question="Is that okay with you?", choices=YES_NO),
         ])
 
     def on_task_complete(self, gw: CallGateway, task_id: str) -> None:
@@ -85,7 +84,8 @@ class CallFlow:
         if not _yes(gw.get_field("intake_consent")):
             gw.end_call(prompts.CONSENT_DECLINED)
             return
-        gw.set_variable("recording_ok", _yes(gw.get_field("recording_ok")))
+        # One question covers both: they agreed to continue after hearing the recording notice.
+        gw.set_variable("recording_ok", True)
         if self.live:
             # Routing fields come from the live assessment; the backend steers follow-up questions.
             gw.start_task("triage", prompts.LIVE_TRIAGE_OBJECTIVE, [

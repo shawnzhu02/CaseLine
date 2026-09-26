@@ -14,13 +14,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from caseline.auth import require_internal_token
+from caseline.auth import SERVICE
 from caseline.deps import get_clock, get_session
 from caseline.enums import CallState, TransferAttemptState
 from caseline.models import CallSession, ProviderEvent, Referral, TransferAttempt
 from caseline.schemas import CallEventIn
 
-router = APIRouter(prefix="/v1", dependencies=[Depends(require_internal_token)])
+router = APIRouter(prefix="/v1", dependencies=[Depends(SERVICE)])
 
 
 @router.post("/calls/events")

@@ -162,9 +162,51 @@ class NotificationOut(BaseModel):
 
 
 class ReferralStatusUpdate(StrictModel):
+    # The actor is the authenticated principal; firm users may only update their own firm's referrals.
     status: Literal["accepted", "declined", "expired"]
-    actor: str = Field(min_length=1, max_length=64)
     note: str | None = Field(default=None, max_length=500)
+
+
+class CaseStatusOverride(StrictModel):
+    status: Literal["human_review", "triage_ready", "closed"]
+    note: str = Field(min_length=1, max_length=500)
+
+
+class ReassignRequest(StrictModel):
+    firm_id: str = Field(min_length=1, max_length=64)  # firm slug
+    note: str = Field(min_length=1, max_length=500)
+
+
+class OperatorConsent(StrictModel):
+    """Consent captured by an operator on a recorded follow-up phone call."""
+
+    purpose: Literal["share_with_selected_firm", "sms", "email"]
+    allowed: bool
+    firm_id: str | None = Field(default=None, max_length=64)  # required for share_with_selected_firm
+
+
+class FirmPatch(StrictModel):
+    accepting_referrals: bool | None = None
+    accepting_live_calls: bool | None = None
+    max_open_referrals: int | None = Field(default=None, ge=0, le=1000)
+
+
+class FirmOut(BaseModel):
+    firm_id: str
+    display_name: str
+    is_demo: bool
+    is_fixture: bool
+    verification_status: str
+    jurisdictions: list[str]
+    practice_areas: list[str]
+    timezone: str
+    accepting_referrals: bool
+    accepting_live_calls: bool
+    max_open_referrals: int
+    open_now: bool
+    availability_reason: str
+    availability_updated_at: datetime
+    has_transfer_number: bool
 
 
 class CallEventIn(StrictModel):

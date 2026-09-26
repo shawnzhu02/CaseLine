@@ -1,3 +1,5 @@
+"""Voice-agent (service role) referral endpoints: transfer authorization, attempts, extended intake."""
+
 from __future__ import annotations
 
 import uuid
@@ -8,7 +10,7 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from caseline import idempotency
-from caseline.auth import require_internal_token
+from caseline.auth import SERVICE
 from caseline.config import Settings
 from caseline.deps import get_clock, get_session, get_settings_dep
 from caseline.schemas import (
@@ -16,15 +18,13 @@ from caseline.schemas import (
     AuthorizeTransferResponse,
     ExtendedIntakeRequest,
     ExtendedIntakeResponse,
-    ReferralStatusUpdate,
     TransferAttemptRequest,
     TransferAttemptResponse,
-    TransferOutcomeRequest,
 )
 from caseline.services import transfer_authorization as ta
-from caseline.services.referrals import submit_extended_intake, update_referral_status
+from caseline.services.referrals import submit_extended_intake
 
-router = APIRouter(prefix="/v1", dependencies=[Depends(require_internal_token)])
+router = APIRouter(prefix="/v1", dependencies=[Depends(SERVICE)])
 
 IdemKey = Header(alias="Idempotency-Key", min_length=1, max_length=200)
 
@@ -67,19 +67,6 @@ def create_transfer_attempt(
     return result
 
 
-@router.post("/transfer-attempts/{attempt_id}/outcome")
-def transfer_outcome(
-    attempt_id: uuid.UUID,
-    req: TransferOutcomeRequest,
-    session: Session = Depends(get_session),
-    clock: Callable[[], datetime] = Depends(get_clock),
-):
-    attempt = ta.record_outcome(session, attempt_id=attempt_id, result=req.result, source=req.source,
-                                actor="operator", now=clock())
-    session.commit()
-    return {"transfer_attempt_id": str(attempt.id), "state": attempt.state, "result_source": attempt.result_source}
-
-
 @router.post("/referrals/{referral_id}/extended-intake", response_model=ExtendedIntakeResponse)
 def extended_intake(
     referral_id: uuid.UUID,
@@ -97,16 +84,3 @@ def extended_intake(
     idempotency.store(session, f"extended-intake:{referral_id}", idempotency_key, body_hash, result)
     session.commit()
     return result
-
-
-@router.post("/referrals/{referral_id}/status")
-def referral_status(
-    referral_id: uuid.UUID,
-    req: ReferralStatusUpdate,
-    session: Session = Depends(get_session),
-    clock: Callable[[], datetime] = Depends(get_clock),
-):
-    referral = update_referral_status(session, referral_id=referral_id, status=req.status, actor=req.actor,
-                                      now=clock())
-    session.commit()
-    return {"referral_id": str(referral.id), "status": referral.status, "case_status": referral.case.status}

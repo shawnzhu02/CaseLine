@@ -7,7 +7,9 @@ from pathlib import Path
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+_PARENTS = Path(__file__).resolve().parents
+# In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
+REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
 APPROVED_DEMO_NUMBERS = frozenset({"+12676804795", "+16173187562"})
 
 

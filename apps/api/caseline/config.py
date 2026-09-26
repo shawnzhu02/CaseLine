@@ -12,7 +12,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The only two live transfer destinations the user approved for the supervised demo (spec §4A).
 # Repo-root .env, so commands work from any directory.
-REPO_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+_PARENTS = Path(__file__).resolve().parents
+# In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
+REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
 
 APPROVED_DEMO_NUMBERS: frozenset[str] = frozenset({"+12676804795", "+16173187562"})
 

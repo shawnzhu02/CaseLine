@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# CI never has Guava credentials, never dials the demo numbers, never sends SMS or email.
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: caseline_test
+          POSTGRES_USER: caseline
+          POSTGRES_PASSWORD: caseline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U caseline -d caseline_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://caseline:caseline@localhost:5432/caseline_test
+      TELECOM_PROVIDER: guava
+      GUAVA_MODE: mock
+      GUAVA_SMS_ENABLED: "false"
+      CASELINE_INTERNAL_API_TOKEN: test-only-token
+      DEMO_MODE: "true"
+      DEMO_LIVE_TRANSFER_ENABLED: "false"
+      DEMO_FIRM_A_TRANSFER_NUMBER: "+12676804795"
+      DEMO_FIRM_B_TRANSFER_NUMBER: "+16173187562"
+      DEMO_TRANSFER_ALLOWLIST: "+12676804795,+16173187562"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install API
+        working-directory: apps/api
+        run: python -m pip install -e ".[dev]"
+      - name: Migrate (Postgres, from empty)
+        working-directory: apps/api
+        run: |
+          alembic upgrade head
+          alembic check
+      - name: Seed twice (idempotent)
+        run: |
+          python scripts/seed_demo.py
+          python scripts/seed_demo.py
+      - name: Lint
+        working-directory: apps/api
+        run: ruff check . ../../scripts
+      - name: Unit tests (SQLite, in-process)
+        working-directory: apps/api
+        run: pytest -q --cov=caseline --cov-report=term-missing
+      - name: Mock demo (no real calls; imports the voice flow from source, not the Guava SDK)
+        run: python scripts/smoke_demo.py --scenario all
+
+  voice-tests:
+    runs-on: ubuntu-latest
+    env:
+      GUAVA_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install voice
+        working-directory: apps/voice
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        working-directory: apps/voice
+        run: ruff check .
+      - name: Unit tests (mock gateway + guava.testing.MockCall; no guava run/deploy)
+        working-directory: apps/voice
+        run: pytest -q
+
+  prohibited-telecom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No other telephony/SMS vendors in code or config
+        run: |
+          if git grep -n -i -E "twilio|telnyx|amazon[ _-]?connect" -- ':!docs/**' ':!*.md' ':!.github/**' ':!**/test_no_prohibited_telecom.py'; then
+            echo "Prohibited telecom vendor reference found"; exit 1
+          fi

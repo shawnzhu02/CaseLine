@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY pyproject.toml main.py ./
 COPY caseline_voice ./caseline_voice
-RUN pip install . && useradd --create-home --uid 10001 voice
-USER voice
+RUN pip install . && useradd --create-home --uid 10001 caseline
+USER caseline
 # Needs GUAVA_API_KEY, GUAVA_AGENT_NUMBER, CASELINE_API_BASE_URL, CASELINE_INTERNAL_API_TOKEN.
 CMD ["python", "main.py", "phone"]

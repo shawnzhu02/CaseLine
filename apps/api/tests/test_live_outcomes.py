@@ -26,7 +26,7 @@ def test_simulated_connect_outcome(h):
     s = sim(h, "Yes, please connect me.", outcome="connect")
     assert s["status"] == "CONNECTING..."
     assert s["outcome"]["type"] == "transfer" and s["outcome"]["simulated"] is True
-    assert s["outcome"]["firm"] == "Demo Partner Firm A"
+    assert s["outcome"]["firm"] == "Premises Liability Lawyer (demo)"
 
 
 def test_simulated_referral_email_outcome(h):
@@ -35,7 +35,7 @@ def test_simulated_referral_email_outcome(h):
     s = sim(h, "Please just send my details, I'll wait for a call back.", outcome="refer")
     assert s["status"] == "REFERRAL DRAFTED"
     out = s["outcome"]
-    assert out["type"] == "email" and "Demo Partner Firm A" in out["body"]
+    assert out["type"] == "email" and "Premises Liability Lawyer (demo)" in out["body"]
     assert "conflicts check" in out["body"] and "Alex" not in out["body"]
 
 

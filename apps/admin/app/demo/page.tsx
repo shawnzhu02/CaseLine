@@ -42,9 +42,9 @@ export default function DemoPage() {
           . Use invented details only. This page shows only CaseLine&apos;s assessment of the latest call (no names, numbers or words spoken).
         </p>
         <p className="demo-fine">
-          Demo participants: &quot;Demo Partner Firm A/B&quot; are placeholder names for team members role-playing
-          lawyers; the Massachusetts personal-injury mapping is fictional. CaseLine is an intake and referral
-          service, not a law firm, and does not give legal advice.
+          Demo participants: the lawyers shown are demo participants for this presentation, and every live transfer
+          rings the team&apos;s supervised demo line. The Massachusetts routing is demo configuration. CaseLine is an
+          intake and referral service, not a law firm, and does not give legal advice.
         </p>
       </section>
     </div>

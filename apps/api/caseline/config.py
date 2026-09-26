@@ -16,7 +16,7 @@ _PARENTS = Path(__file__).resolve().parents
 # In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
 REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
 
-APPROVED_DEMO_NUMBERS: frozenset[str] = frozenset({"+12676804795", "+16173187562"})
+APPROVED_DEMO_NUMBERS: frozenset[str] = frozenset({"+16173187562"})
 
 
 class ConfigError(ValueError):
@@ -55,11 +55,14 @@ class Settings(BaseSettings):
 
     demo_mode: bool = False
     demo_live_transfer_enabled: bool = False
-    demo_firm_a_name: str = "Demo Partner Firm A"
-    demo_firm_a_transfer_number: str = "+12676804795"
-    demo_firm_b_name: str = "Demo Partner Firm B"
+    # All demo lawyers ring the same supervised demo line.
+    demo_firm_a_name: str = "Insurance Lawyer (demo)"
+    demo_firm_a_transfer_number: str = "+16173187562"
+    demo_firm_b_name: str = "Personal Injury Lawyer (demo)"
     demo_firm_b_transfer_number: str = "+16173187562"
-    demo_transfer_allowlist: str = "+12676804795,+16173187562"
+    demo_firm_c_name: str = "Premises Liability Lawyer (demo)"
+    demo_firm_c_transfer_number: str = "+16173187562"
+    demo_transfer_allowlist: str = "+16173187562"
     demo_simulate_firm_availability: bool = False
 
     transfer_authorization_ttl_seconds: int = 120
@@ -126,12 +129,14 @@ class Settings(BaseSettings):
             raise ConfigError("APP_ENV=test may never use GUAVA_MODE=live")
         if self.app_env == "production" and (self.demo_mode or self.demo_simulate_firm_availability):
             raise ConfigError("Demo flags must be off in production")
-        for number in [*self.transfer_allowlist, self.demo_firm_a_transfer_number, self.demo_firm_b_transfer_number]:
+        demo_numbers = {self.demo_firm_a_transfer_number, self.demo_firm_b_transfer_number,
+                        self.demo_firm_c_transfer_number}
+        for number in [*self.transfer_allowlist, *demo_numbers]:
             if not is_e164(number):
                 raise ConfigError("Every transfer number must be a valid E.164 number")
         if self.demo_mode and not self.transfer_allowlist <= APPROVED_DEMO_NUMBERS:
             raise ConfigError("In demo mode the transfer allowlist may contain only the two approved demo numbers")
-        if {self.demo_firm_a_transfer_number, self.demo_firm_b_transfer_number} - APPROVED_DEMO_NUMBERS:
+        if demo_numbers - APPROVED_DEMO_NUMBERS:
             raise ConfigError("Demo firm transfer numbers must be the two approved demo numbers")
         if self.app_env in {"staging", "demo", "production"}:
             if self.caseline_internal_api_token.get_secret_value() in {"", "dev-only-token"}:

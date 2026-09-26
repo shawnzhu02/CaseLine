@@ -254,6 +254,7 @@ class Assessment:
     matter: str | None = None
     urgency: str | None = None
     key_factors: list[str] = field(default_factory=list)
+    routing_area: str | None = None  # practice area used for matching (may be narrower than category)
     ready: bool = False
     next_question: str | None = None  # QUESTIONS key
     reasons: dict[str, str] = field(default_factory=dict)
@@ -278,9 +279,11 @@ def assess(facts: dict[str, Any]) -> Assessment:
         a.category = "property_insurance"
         a.reasons["category"] = "caller described property loss"
 
+    a.routing_area = a.category
     if a.category == "personal_injury" and facts.get("prior_hazard_reported") and facts.get("responsible_party") in (
             "landlord", "property_owner", "business"):
         a.matter = MATTER_LABELS["premises_liability"]
+        a.routing_area = "premises_liability"
         a.reasons["matter"] = "hazard reported to the responsible party before the incident"
     elif facts.get("incident") in MATTER_LABELS:
         a.matter = MATTER_LABELS[facts["incident"]]

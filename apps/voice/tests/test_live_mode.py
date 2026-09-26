@@ -28,7 +28,7 @@ class LiveBackend(FakeBackend):
 
 
 def flow_for(backend):
-    return CallFlow(backend, frozenset({"+12676804795"}), live_assessment=True)
+    return CallFlow(backend, frozenset({"+16173187562"}), live_assessment=True)
 
 
 def test_live_triage_checklist_has_no_model_chosen_routing_fields():

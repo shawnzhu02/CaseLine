@@ -39,7 +39,7 @@ def test_fire_demo_script_evolves_assessment(h):
     assert s["matter"] == "Potential Premises Liability"
     assert {"Hazard previously reported", "Landlord previously notified"} <= set(s["key_factors"])
     assert s["ready"] is True and s["assessment_ready"] is True
-    assert s["match"]["firm_id"] == "demo-firm-a" and s["match"]["route"] == "transfer"
+    assert s["match"]["firm_id"] == "demo-firm-c" and s["match"]["route"] == "transfer"
     assert s["action"] == "Connect now" and s["status"] == "MATCH FOUND"
 
 
@@ -60,7 +60,7 @@ def test_triage_uses_ready_assessment_then_transfer_path(live):
     ]:
         say(live, speaker, text)
     tri = live.triage(CALL, practice_area=None, jurisdiction=None, issue_summary="Fire at rented home").json()
-    assert tri["action"] == "transfer" and tri["selected_firm"]["firm_id"] == "demo-firm-a"
+    assert tri["action"] == "transfer" and tri["selected_firm"]["firm_id"] == "demo-firm-c"
     auth = live.authorize(tri["referral_id"], CALL).json()
     live.attempt(tri["referral_id"], CALL, auth)
     status = live.get("/v1/live/current", as_="operator").json()["status"]

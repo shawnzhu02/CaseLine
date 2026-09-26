@@ -63,7 +63,7 @@ def test_sms_not_sent_without_consent(make_harness):
 
 def test_sms_never_sent_to_demo_lawyer_numbers(make_harness):
     h = make_harness(now=NIGHT, guava_sms_enabled=True, guava_sms_from_number="+12025550199")
-    _after_hours_referral(h, callback="+12676804795")
+    _after_hours_referral(h, callback="+16173187562")
     _run(h)
     assert h.gateways.sms.sent == []
     with h.db.sessionmaker() as s:

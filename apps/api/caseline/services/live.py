@@ -32,13 +32,13 @@ def _get_or_create(session: Session, provider_call_id: str, now: datetime) -> tu
 
 
 def _match(session: Session, a: A.Assessment, settings: Settings, now: datetime) -> dict | None:
-    if not a.ready or not a.jurisdiction or not a.category:
+    if not a.ready or not a.jurisdiction or not a.routing_area:
         return None
     firms = list(session.scalars(select(Firm)))
     counts = dict(session.execute(
         select(Referral.firm_id, func.count()).where(Referral.status.in_(ACTIVE_REFERRAL_STATES))
         .group_by(Referral.firm_id)).all())
-    result = select_firm(jurisdiction=a.jurisdiction, practice_area=a.category, language="en", firms=firms,
+    result = select_firm(jurisdiction=a.jurisdiction, practice_area=a.routing_area, language="en", firms=firms,
                          open_referral_counts=counts, now_utc=now, settings=settings)
     if result.firm is None:
         return {"firm_id": None, "display_name": None, "route": "none"}
@@ -59,6 +59,7 @@ def _derive_view(a: A.Assessment, match: dict | None) -> dict[str, Any]:
     return {
         "jurisdiction": a.jurisdiction, "jurisdiction_label": a.jurisdiction_label,
         "category": a.category, "category_label": A.CATEGORY_LABELS.get(a.category or ""),
+        "routing_area": a.routing_area,
         "matter": a.matter, "urgency": a.urgency, "key_factors": a.key_factors,
         "ready": a.ready, "match": match, "action": _action(a, match),
         "next_question": a.next_question, "reasons": a.reasons,
@@ -236,4 +237,4 @@ def assessed_routing(session: Session, call_session_id) -> tuple[str | None, str
     row = session.scalar(select(CallAssessment).where(CallAssessment.call_session_id == call_session_id))
     if row is None or not (row.view or {}).get("ready"):
         return None, None
-    return row.view.get("jurisdiction"), row.view.get("category")
+    return row.view.get("jurisdiction"), row.view.get("routing_area") or row.view.get("category")

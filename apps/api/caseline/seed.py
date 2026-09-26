@@ -33,12 +33,14 @@ def demo_firms(settings: Settings) -> list[dict]:
     }
     return [
         {**common, "slug": "demo-firm-a", "display_name": settings.demo_firm_a_name,
-         "transfer_number": settings.demo_firm_a_transfer_number, "practice_areas": ["DEMO_AREA_A", "personal_injury"],
-         "routing_priority": 10},
+         "transfer_number": settings.demo_firm_a_transfer_number,
+         "practice_areas": ["DEMO_AREA_A", "property_insurance"], "routing_priority": 10},
         {**common, "slug": "demo-firm-b", "display_name": settings.demo_firm_b_name,
          "transfer_number": settings.demo_firm_b_transfer_number,
-         "practice_areas": ["DEMO_AREA_B", "property_insurance"],
-         "routing_priority": 10},
+         "practice_areas": ["DEMO_AREA_B", "personal_injury"], "routing_priority": 10},
+        {**common, "slug": "demo-firm-c", "display_name": settings.demo_firm_c_name,
+         "transfer_number": settings.demo_firm_c_transfer_number,
+         "practice_areas": ["premises_liability"], "routing_priority": 10},
     ]
 
 

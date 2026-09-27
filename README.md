@@ -1,5 +1,7 @@
 # CaseLine
 
+Winner of the Guava AI Hackathon on 9/26/2026
+
 **One number. One conversation. The right legal help.**
 
 CaseLine is an AI telephone intake and law-firm referral service. A caller dials one Guava-managed number

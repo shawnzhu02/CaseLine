@@ -31,7 +31,7 @@ def test_after_hours_sends_mock_notifications_without_calling(make_harness):
     assert len(h.gateways.sms.sent) == 1
     sms = h.gateways.sms.sent[0]
     assert sms["to"] == "+12125550100" and "STOP" in sms["message"]
-    assert "+12676804795" not in str(h.gateways.sms.sent) and "+16173187562" not in str(h.gateways.sms.sent)
+    assert "+12676804795" not in str(h.gateways.sms.sent)
     email = h.gateways.email.sent[0]
     assert email["to"].endswith(".invalid")  # demo firm alerts are mocked, never real inboxes
     assert "Fictional demo matter" not in email["text"]  # minimum necessary: no narrative
@@ -63,7 +63,7 @@ def test_sms_not_sent_without_consent(make_harness):
 
 def test_sms_never_sent_to_demo_lawyer_numbers(make_harness):
     h = make_harness(now=NIGHT, guava_sms_enabled=True, guava_sms_from_number="+12025550199")
-    _after_hours_referral(h, callback="+16173187562")
+    _after_hours_referral(h, callback="+12676804795")
     _run(h)
     assert h.gateways.sms.sent == []
     with h.db.sessionmaker() as s:

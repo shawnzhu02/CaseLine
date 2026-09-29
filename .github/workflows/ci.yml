@@ -33,8 +33,8 @@ jobs:
       DEMO_MODE: "true"
       DEMO_LIVE_TRANSFER_ENABLED: "false"
       DEMO_FIRM_A_TRANSFER_NUMBER: "+12676804795"
-      DEMO_FIRM_B_TRANSFER_NUMBER: "+16173187562"
-      DEMO_TRANSFER_ALLOWLIST: "+12676804795,+16173187562"
+      DEMO_FIRM_B_TRANSFER_NUMBER: "+12676804795"
+      DEMO_TRANSFER_ALLOWLIST: "+12676804795"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

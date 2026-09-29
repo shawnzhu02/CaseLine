@@ -46,7 +46,7 @@ def replay(name: str, story: str, answers: list[str]) -> str:
         seed(s, settings)
     app = create_app(settings, db, clock=lambda: datetime(2026, 9, 29, 15, 0, tzinfo=UTC))
     backend = CaseLineBackend("http://testserver", token, client=TestClient(app))
-    flow = CallFlow(backend, frozenset({"+16173187562"}), live_assessment=True)
+    flow = CallFlow(backend, frozenset({"+12676804795"}), live_assessment=True)
     gw = MockCallGateway(call_id=name, caller_id_number="+12125550100",
                          fields={"intake_consent": "yes", "issue_summary": story})
     flow.on_call_start(gw)

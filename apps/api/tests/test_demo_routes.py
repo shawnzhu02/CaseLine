@@ -1,9 +1,9 @@
-"""Demo routing: every demo lawyer rings the supervised demo line +16173187562, only after consent."""
+"""Demo routing: every demo lawyer rings the supervised demo line +12676804795, only after consent."""
 
 from __future__ import annotations
 
-FIRM_A = "+16173187562"  # all demo lawyers share the demo line
-FIRM_B = "+16173187562"
+FIRM_A = "+12676804795"  # all demo lawyers share the demo line
+FIRM_B = "+12676804795"
 
 
 def _route(harness, call_id: str, area: str):
@@ -56,7 +56,7 @@ def test_scenarios_never_cross_destinations(live):
     _, auth_a = _route(live, "call-a", "DEMO_AREA_A")
     _, auth_b = _route(live, "call-b", "DEMO_AREA_B")
     assert auth_a.json()["display_name"] != auth_b.json()["display_name"]
-    assert {auth_a.json()["destination_e164"], auth_b.json()["destination_e164"]} == {"+16173187562"}
+    assert {auth_a.json()["destination_e164"], auth_b.json()["destination_e164"]} == {"+12676804795"}
 
 
 def test_mock_transfer_attempt_uses_server_destination(live):

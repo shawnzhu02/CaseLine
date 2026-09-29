@@ -30,8 +30,8 @@ def test_case_detail_never_shows_full_dial_target(live):
     auth = live.authorize(tri["referral_id"], "c1").json()
     live.attempt(tri["referral_id"], "c1", auth)
     detail = live.get(f"/v1/admin/cases/{tri['case_id']}").json()
-    assert detail["transfer_attempts"][0]["dial_target_masked"] == "***62"
-    assert "+16173187562" not in str(detail)
+    assert detail["transfer_attempts"][0]["dial_target_masked"] == "***95"
+    assert "+12676804795" not in str(detail)
 
 
 def test_operator_toggles_firm_live_calls(h):

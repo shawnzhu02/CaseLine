@@ -28,7 +28,7 @@ numbers or anything the caller said. The full case, with contact details and aud
 - **Firm open + caller agrees:** the API authorizes a transfer only when `DEMO_LIVE_TRANSFER_ENABLED=true`. The agent
   then transfers through Guava to the matched demo lawyer, and the board shows **CONNECTING…**. The three demo
   lawyers (Insurance, Personal Injury and Premises Liability Lawyer, all labelled "(demo)") **all ring
-  +1 617-318-7562**, the only approved number (267-680-4795 was removed). Live transfer is currently **ON**.
+  +1 267-680-4795**, the shared approved number for all demo lawyers. Live transfer is currently **ON**.
 - **Otherwise** (flag off, caller declines, or firm closed): the agent asks a few follow-ups plus share/text
   permission, then CaseLine creates the referral. The board shows the **drafted email** to the firm. Email sending is
   mocked, so nothing leaves the system.

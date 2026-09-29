@@ -10,13 +10,13 @@ import phonenumbers
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The only two live transfer destinations the user approved for the supervised demo (spec §4A).
+# The shared live transfer destination approved for all demo firms.
 # Repo-root .env, so commands work from any directory.
 _PARENTS = Path(__file__).resolve().parents
 # In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
 REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
 
-APPROVED_DEMO_NUMBERS: frozenset[str] = frozenset({"+12676804795", "+16173187562"})
+APPROVED_DEMO_NUMBERS: frozenset[str] = frozenset({"+12676804795"})
 
 
 class ConfigError(ValueError):
@@ -58,8 +58,8 @@ class Settings(BaseSettings):
     demo_firm_a_name: str = "Demo Partner Firm A"
     demo_firm_a_transfer_number: str = "+12676804795"
     demo_firm_b_name: str = "Demo Partner Firm B"
-    demo_firm_b_transfer_number: str = "+16173187562"
-    demo_transfer_allowlist: str = "+12676804795,+16173187562"
+    demo_firm_b_transfer_number: str = "+12676804795"
+    demo_transfer_allowlist: str = "+12676804795"
     demo_simulate_firm_availability: bool = False
 
     transfer_authorization_ttl_seconds: int = 120
@@ -121,9 +121,9 @@ class Settings(BaseSettings):
             if not is_e164(number):
                 raise ConfigError("Every transfer number must be a valid E.164 number")
         if self.demo_mode and not self.transfer_allowlist <= APPROVED_DEMO_NUMBERS:
-            raise ConfigError("In demo mode the transfer allowlist may contain only the two approved demo numbers")
+            raise ConfigError("In demo mode the transfer allowlist may contain only the approved demo number")
         if {self.demo_firm_a_transfer_number, self.demo_firm_b_transfer_number} - APPROVED_DEMO_NUMBERS:
-            raise ConfigError("Demo firm transfer numbers must be the two approved demo numbers")
+            raise ConfigError("Demo firm transfer numbers must be the approved demo number")
         if self.app_env in {"staging", "demo", "production"}:
             if self.caseline_internal_api_token.get_secret_value() in {"", "dev-only-token"}:
                 raise ConfigError("CASELINE_INTERNAL_API_TOKEN must be set outside development")

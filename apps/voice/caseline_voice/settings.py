@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _PARENTS = Path(__file__).resolve().parents
 # In a container the package sits at a shallow path (/app/...), so fall back to ./.env.
 REPO_ENV_FILE = _PARENTS[3] / ".env" if len(_PARENTS) > 3 else Path(".env")
-APPROVED_DEMO_NUMBERS = frozenset({"+12676804795", "+16173187562"})
+APPROVED_DEMO_NUMBERS = frozenset({"+12676804795"})
 
 
 class VoiceSettings(BaseSettings):
@@ -23,11 +23,11 @@ class VoiceSettings(BaseSettings):
     # The Guava-managed CaseLine inbound number callers dial.
     guava_agent_number: str = "+14849687497"
     # Defense in depth: even a backend-authorized destination is dialed only if it is also listed here.
-    voice_transfer_allowlist: str = "+12676804795,+16173187562"
+    voice_transfer_allowlist: str = "+12676804795"
     default_phone_region: str = "US"
 
     @property
     def transfer_allowlist(self) -> frozenset[str]:
         allow = frozenset(n.strip() for n in self.voice_transfer_allowlist.split(",") if n.strip())
-        # Never widen beyond the two approved demo destinations without changing this code on purpose.
+        # Never widen beyond the approved demo destination without changing this code on purpose.
         return allow & APPROVED_DEMO_NUMBERS

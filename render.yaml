@@ -24,7 +24,7 @@ envVarGroups:
       - key: DEMO_SIMULATE_FIRM_AVAILABILITY
         value: "false"
       - key: DEMO_TRANSFER_ALLOWLIST
-        value: "+12676804795,+16173187562"
+        value: "+12676804795"
       - key: CASELINE_INTERNAL_API_TOKEN
         sync: false
       - key: CASELINE_FIELD_ENCRYPTION_KEY

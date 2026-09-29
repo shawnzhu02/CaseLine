@@ -1,12 +1,12 @@
 # CaseLine demo runbook
 
-Two demo destinations (spec §4A). These are real people role-playing lawyers; the labels are placeholders and
+Two demo firms sharing one transfer destination. The recipient is role-playing a lawyer; the labels are placeholders and
 nothing about them (firm name, credentials, specialty, hours) is real.
 
 | Demo firm | Transfer number | Routed by (fictional fixture) |
 | --- | --- | --- |
 | Demo Partner Firm A (`demo-firm-a`) | 267-680-4795 (`+12676804795`) | practice area "Demo matter A" (`DEMO_AREA_A`) in "CaseLine demo region" |
-| Demo Partner Firm B (`demo-firm-b`) | 617-318-7562 (`+16173187562`) | practice area "Demo matter B" (`DEMO_AREA_B`) in "CaseLine demo region" |
+| Demo Partner Firm B (`demo-firm-b`) | 267-680-4795 (`+12676804795`) | practice area "Demo matter B" (`DEMO_AREA_B`) in "CaseLine demo region" |
 
 CaseLine inbound number (Guava-managed): **484-968-7497 (`+14849687497`)**. It is never a transfer or SMS target.
 
@@ -29,7 +29,7 @@ Expected (verified 2026-09-26):
 
 ```text
 firm-a -> Demo Partner Firm A -> +12676804795 -> MOCK TRANSFER ONLY (attempt recorded as 'requested', not connected)
-firm-b -> Demo Partner Firm B -> +16173187562 -> MOCK TRANSFER ONLY (attempt recorded as 'requested', not connected)
+firm-b -> Demo Partner Firm B -> +12676804795 -> MOCK TRANSFER ONLY (attempt recorded as 'requested', not connected)
 after-hours -> Demo Partner Firm A -> no live transfer -> extended intake/referral path (mock email x1, mock Guava SMS x1)
 declined -> Demo Partner Firm B -> no live transfer -> extended intake/referral path (mock email x1, mock Guava SMS x1)
 live-disabled -> Demo Partner Firm A -> no live transfer -> extended intake/referral path (mock email x1, mock Guava SMS x1)
@@ -67,7 +67,7 @@ guava run apps\voice -- chat
 
 Before setting any live flag:
 
-1. Confirm **both** demo recipients (267-680-4795 and 617-318-7562) have agreed to receive test calls now.
+1. Confirm the demo recipient (267-680-4795) has agreed to receive test calls now.
 2. Confirm `+14849687497` is listed by `guava numbers list` **after** `guava org use 6ab7f4cf7b00c3f140ce5686`,
    and that `GUAVA_API_KEY` is a key from that org. Make sure no other copy of the agent (for example the
    `caseline-voice` Render worker) is listening on the number.
@@ -77,7 +77,7 @@ Before setting any live flag:
    ```powershell
    $env:DEMO_MODE = "true"
    $env:DEMO_LIVE_TRANSFER_ENABLED = "true"
-   $env:DEMO_TRANSFER_ALLOWLIST = "+12676804795,+16173187562"
+   $env:DEMO_TRANSFER_ALLOWLIST = "+12676804795"
    ```
    Restart uvicorn and check `Invoke-RestMethod http://127.0.0.1:8000/health/ready` shows `demo_live_transfer_enabled: True`.
    (Outside 08:00–20:00 New York time also set `$env:DEMO_SIMULATE_FIRM_AVAILABILITY = "true"`.)
@@ -101,7 +101,7 @@ Scenario A (Firm A):
 Scenario B (Firm B):
 
 11. Call **484-968-7497** again. Same steps but say **"demo matter B"**.
-12. Verify the agent names **Demo Partner Firm B**, asks permission, then transfers to **617-318-7562**. Record the outcome.
+12. Verify the agent names **Demo Partner Firm B**, asks permission, then transfers to **267-680-4795**. Record the outcome.
 
 Negative checks:
 

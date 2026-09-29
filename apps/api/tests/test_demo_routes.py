@@ -1,9 +1,9 @@
-"""Spec §4A / §28 critical demo assertions: A -> +12676804795, B -> +16173187562, only after consent."""
+"""Spec §4A / §28 critical demo assertions: A -> +12676804795, B -> +12676804795, only after consent."""
 
 from __future__ import annotations
 
 FIRM_A = "+12676804795"
-FIRM_B = "+16173187562"
+FIRM_B = "+12676804795"
 
 
 def _route(harness, call_id: str, area: str):
@@ -52,10 +52,10 @@ def test_authorize_transfer_returns_firm_b_number_after_consent(live):
     assert auth_b.json()["destination_e164"] == FIRM_B
 
 
-def test_scenarios_never_cross_destinations(live):
+def test_both_demo_firms_share_destination(live):
     _, auth_a = _route(live, "call-a", "DEMO_AREA_A")
     _, auth_b = _route(live, "call-b", "DEMO_AREA_B")
-    assert {auth_a.json()["destination_e164"], auth_b.json()["destination_e164"]} == {FIRM_A, FIRM_B}
+    assert {auth_a.json()["destination_e164"], auth_b.json()["destination_e164"]} == {"+12676804795"}
 
 
 def test_mock_transfer_attempt_uses_server_destination(live):

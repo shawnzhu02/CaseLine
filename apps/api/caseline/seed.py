@@ -1,4 +1,4 @@
-"""Idempotent seed data: two demo destinations (spec §4A, §24) + fictional fixture firms (Phase 1).
+"""Idempotent seed data: two demo firms sharing one destination (spec §4A, §24) + fictional fixture firms (Phase 1).
 
 Nothing here describes the real people who answer the demo numbers: names are placeholders, categories
 are fictional routing fixtures, and hours are invented demo hours.

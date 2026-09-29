@@ -1,4 +1,4 @@
-"""Idempotent seed of the two demo destinations + fictional fixture firms into DATABASE_URL.
+"""Idempotent seed of the two demo firms sharing one destination + fictional fixture firms into DATABASE_URL.
 
 Usage (from the repo root, API venv active, after `alembic upgrade head`):
     python scripts/seed_demo.py

@@ -18,7 +18,7 @@ transferred live (after consenting) or referred asynchronously.
 | --- | --- |
 | API: triage, deterministic matching, timezone-aware hours, consent, state machines, audit, idempotency | **implemented** |
 | Secure transfer authorization (one-time token, allowlist, live flag off by default) | **implemented** |
-| Two demo destinations (Firm A `+12676804795`, Firm B `+16173187562`) + fictional fixture firms | **implemented** (seeded) |
+| Demo firms sharing `+12676804795` + fictional fixture firms | **implemented** (seeded) |
 | Guava voice agent (`apps/voice`, guava-sdk 0.45.0) wired to the API | **implemented**, tested with mocks; not yet run on a live call |
 | Extended intake → pending referral → outbox (firm email, caller SMS) | **implemented**; providers **mocked** |
 | Versioned firm reports, signed expiring links, firm-isolated report API | **implemented** |
@@ -136,7 +136,7 @@ See `.env.example`. Key safety settings (validated at startup, see `apps/api/cas
 
 - `TELECOM_PROVIDER` must be `guava`; `GUAVA_MODE=mock` by default.
 - `DEMO_LIVE_TRANSFER_ENABLED=true` is rejected unless `DEMO_MODE=true`; `APP_ENV=test` can never use live Guava.
-- `DEMO_TRANSFER_ALLOWLIST` may contain only `+12676804795` and `+16173187562`; every number must be E.164.
+- `DEMO_TRANSFER_ALLOWLIST` may contain only `+12676804795`; every number must be E.164.
 - Demo flags are rejected in production; `CASELINE_INTERNAL_API_TOKEN` must be set outside development.
 
 ## Before real callers

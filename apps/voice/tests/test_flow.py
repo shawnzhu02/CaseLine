@@ -170,7 +170,7 @@ def test_after_hours_extended_intake_submits_facts_and_consents():
 
 
 def test_voice_allowlist_cannot_be_widened():
-    s = VoiceSettings(_env_file=None, voice_transfer_allowlist="+12676804795,+15555550199")
+    s = VoiceSettings(_env_file=None, voice_transfer_allowlist="+12676804795,+16173187562,+15555550199")
     assert s.transfer_allowlist == frozenset({"+12676804795"})
 
 

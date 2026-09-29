@@ -258,7 +258,7 @@ Do not represent the output as “the best lawyer.” A partner firm's internal 
 | Demo destination | Human-readable number | E.164 dialing number | Demo firm label |
 | --- | --- | --- | --- |
 | Demo Partner Firm A | **267 680 4795** | **`+12676804795`** | `Demo Partner Firm A` (placeholder name) |
-| Demo Partner Firm B | **617 318 7562** | **`+16173187562`** | `Demo Partner Firm B` (placeholder name) |
+| Demo Partner Firm B | **267 680 4795** | **`+12676804795`** | `Demo Partner Firm B` (placeholder name) |
 
 Callers reach the CaseLine agent itself at **484 968 7497 (`+14849687497`)**, the Guava-managed inbound number (never a transfer or SMS target).
 
@@ -267,7 +267,7 @@ Do not infer or announce actual law-firm names, lawyer credentials, specialties,
 ### Required demo behavior
 
 1. Seed **two participating demo firms** with stable fixture IDs, the labels above and the exact transfer numbers. They must both appear as distinct destinations in the demo admin view and seed/configuration. Use the existing firm-matching path rather than giving the LLM permission to choose, invent or dial arbitrary numbers.
-2. Provide **two reproducible scripted demo scenarios**: scenario A selects Partner Firm A and routes to `+12676804795`; scenario B selects Partner Firm B and routes to `+16173187562`. Both should use invented callers and sample case facts. Make the fixture's case category/jurisdiction and eligibility mapping explicit in code/config; do **not** claim that either actual recipient is qualified for those real-world legal matters.
+2. Provide **two reproducible scripted demo scenarios**: scenario A selects Partner Firm A and routes to `+12676804795`; scenario B selects Partner Firm B and routes to `+12676804795`. Both should use invented callers and sample case facts. Make the fixture's case category/jurisdiction and eligibility mapping explicit in code/config; do **not** claim that either actual recipient is qualified for those real-world legal matters.
 3. For a supervised **live demo**, use a separate, explicitly enabled `demo` environment with an outbound-transfer allowlist containing **only** the two E.164 numbers. Keep the flag **off by default**. Require the team to confirm that the two receiving people agree to receive test calls and that the test account is authorized to make them before enabling it. Never dial either number during ordinary unit tests, continuous integration, a preview deployment or an autonomous agent run.
 4. If the selected demo recipient is configured as open/accepting and the demo caller agrees, initiate the **live Guava transfer** to the exact selected number. Show the selected demo firm name in the spoken handoff. Record `transfer_requested`; mark `transfer_connected` only when supported by verified provider signals or human confirmation.
 5. Include an after-hours/unavailable demo variant. When the selected firm is configured closed or a transfer cannot be completed, continue extended intake, create a **mocked** notification for that demo firm, and send a **mock Guava SMS** or mock email confirmation to the fictional caller. The two lawyer phone numbers are for **Guava voice transfer**; do not use them as SMS recipients by default.
@@ -284,8 +284,8 @@ DEMO_LIVE_TRANSFER_ENABLED=false
 DEMO_FIRM_A_NAME=Demo Partner Firm A
 DEMO_FIRM_A_TRANSFER_NUMBER=+12676804795
 DEMO_FIRM_B_NAME=Demo Partner Firm B
-DEMO_FIRM_B_TRANSFER_NUMBER=+16173187562
-DEMO_TRANSFER_ALLOWLIST=+12676804795,+16173187562
+DEMO_FIRM_B_TRANSFER_NUMBER=+12676804795
+DEMO_TRANSFER_ALLOWLIST=+12676804795
 DEMO_SIMULATE_FIRM_AVAILABILITY=false
 ```
 
@@ -293,7 +293,7 @@ When `DEMO_MODE=false`, demo overrides must be inert. In real environments, veri
 
 ### Demo acceptance checks
 
-- [ ] A mocked call in scenario A selects `Demo Partner Firm A` and returns a transfer authorization for `+12676804795`; scenario B selects `Demo Partner Firm B` and returns one for `+16173187562`.
+- [ ] A mocked call in scenario A selects `Demo Partner Firm A` and returns a transfer authorization for `+12676804795`; scenario B selects `Demo Partner Firm B` and returns one for `+12676804795`.
 - [ ] The Guava adapter uses exactly the server-approved E.164 destination, with no model-supplied override.
 - [ ] An unauthorized number (including a transcription mistake), disabled live-demo flag, missing caller consent or no eligible demo firm prevents a real transfer.
 - [ ] A failed/no-answer call remains recorded as attempted, not connected; no hidden automatic transfer to the other demo number occurs.
@@ -491,7 +491,7 @@ At minimum, implement these automated scenarios (all fictional data):
 | Wrong firm/user attempts report access | Access denied and event logged; no cross-firm leak. |
 | Worker restarts mid-notification | Event is retryable and idempotent. |
 | Report edited after initial delivery | New version retained; recipient sees the correct version and an explicit update if needed. |
-| Demo scenario A/B with mock calling | Selected destinations are exactly `+12676804795` and `+16173187562`, respectively; no real calls. |
+| Demo scenario A/B with mock calling | Selected destinations are exactly `+12676804795` and `+12676804795`, respectively; no real calls. |
 | Demo mode enabled but live transfers disabled | No real dialing, regardless of model output or simulated availability. |
 | Demo caller declines transfer or destination is not allowlisted | Transfer blocked and non-call fallback recorded. |
 
@@ -560,8 +560,8 @@ DEMO_LIVE_TRANSFER_ENABLED=false
 DEMO_FIRM_A_NAME=Demo Partner Firm A
 DEMO_FIRM_A_TRANSFER_NUMBER=+12676804795
 DEMO_FIRM_B_NAME=Demo Partner Firm B
-DEMO_FIRM_B_TRANSFER_NUMBER=+16173187562
-DEMO_TRANSFER_ALLOWLIST=+12676804795,+16173187562
+DEMO_FIRM_B_TRANSFER_NUMBER=+12676804795
+DEMO_TRANSFER_ALLOWLIST=+12676804795
 DEMO_SIMULATE_FIRM_AVAILABILITY=false
 STORAGE_BUCKET=
 STORAGE_REGION=
@@ -593,9 +593,9 @@ At the end of implementation, provide:
 3. A current `README.md`, `.env.example`, OpenAPI documentation and architecture/decision notes.
 4. Test results for successful transfer, transfer failure, after-hours routing, no-match, consent-denied, duplicate events and unauthorized report access.
 5. Clearly labeled **implemented / mocked / blocked / needs partner decision** items. Do not claim untested Guava transfer semantics or successful delivery to real firms.
-6. The minimum remaining checklist for a supervised staging pilot, identifying the required **Guava** credential/managed number/SMS capability, permitted separate email configuration, legal approval and partner-firm input. **Include the exact manual steps to demonstrate routing to both user-provided numbers in Section 4A, separately, after obtaining both recipients' permission.**
+6. The minimum remaining checklist for a supervised staging pilot, identifying the required **Guava** credential/managed number/SMS capability, permitted separate email configuration, legal approval and partner-firm input. **Include the exact manual steps to demonstrate routing for both demo firms to the shared approved number in Section 4A, after obtaining the recipient's permission.**
 
-**First concrete task:** audit the current CaseLine repository and current Guava documentation, including native SMS; then implement Phase 1 with fictional seeded firms **and the two explicitly specified demo transfer destinations** plus a mocked **Guava** inbound call. Demonstrate that scripted scenario A resolves to `+12676804795` and scenario B to `+16173187562` before configuring supervised real calling. Never run live outbound calls from automated tests.
+**First concrete task:** audit the current CaseLine repository and current Guava documentation, including native SMS; then implement Phase 1 with fictional seeded firms **and the two explicitly specified demo transfer destinations** plus a mocked **Guava** inbound call. Demonstrate that scripted scenario A resolves to `+12676804795` and scenario B to `+12676804795` before configuring supervised real calling. Never run live outbound calls from automated tests.
 
 
 ---
@@ -769,8 +769,8 @@ class Settings(BaseSettings):
     demo_mode: bool = False
     demo_live_transfer_enabled: bool = False
     demo_firm_a_transfer_number: str = "+12676804795"
-    demo_firm_b_transfer_number: str = "+16173187562"
-    demo_transfer_allowlist: str = "+12676804795,+16173187562"
+    demo_firm_b_transfer_number: str = "+12676804795"
+    demo_transfer_allowlist: str = "+12676804795"
     demo_simulate_firm_availability: bool = False
 ```
 
@@ -780,7 +780,7 @@ Startup assertions:
 2. When `guava_mode=live`, `GUAVA_API_KEY` and `GUAVA_AGENT_NUMBER` must be present.
 3. `DEMO_LIVE_TRANSFER_ENABLED=true` is invalid unless `DEMO_MODE=true`.
 4. Every allowlisted transfer number must parse as E.164.
-5. In demo mode, the allowlist must contain only the two approved numbers unless the user explicitly changes this specification.
+5. In demo mode, the allowlist must contain only the approved number unless the user explicitly changes this specification.
 6. Never print secrets in logs or validation errors.
 
 ## 18. Domain enums and state machine
@@ -979,7 +979,7 @@ def select_firm(case, firms, now_utc):
 For the demo seeds:
 
 - `DEMO_AREA_A` + `DEMO_JURISDICTION` → only `demo-firm-a` eligible → `+12676804795` after authorization.
-- `DEMO_AREA_B` + `DEMO_JURISDICTION` → only `demo-firm-b` eligible → `+16173187562` after authorization.
+- `DEMO_AREA_B` + `DEMO_JURISDICTION` → only `demo-firm-b` eligible → `+12676804795` after authorization.
 
 These categories are fictional routing fixtures. They do not represent the recipients' real legal specialties.
 
@@ -1179,7 +1179,7 @@ DEMO_FIRMS = [
     {
         "slug": "demo-firm-b",
         "display_name": "Demo Partner Firm B",
-        "transfer_number": "+16173187562",
+        "transfer_number": "+12676804795",
         "jurisdictions": ["DEMO_JURISDICTION"],
         "practice_areas": ["DEMO_AREA_B"],
         "accepting_referrals": True,
@@ -1283,8 +1283,8 @@ jobs:
       DEMO_MODE: "true"
       DEMO_LIVE_TRANSFER_ENABLED: "false"
       DEMO_FIRM_A_TRANSFER_NUMBER: +12676804795
-      DEMO_FIRM_B_TRANSFER_NUMBER: +16173187562
-      DEMO_TRANSFER_ALLOWLIST: +12676804795,+16173187562
+      DEMO_FIRM_B_TRANSFER_NUMBER: +12676804795
+      DEMO_TRANSFER_ALLOWLIST: +12676804795
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -1335,7 +1335,7 @@ Critical assertions:
 assert result_a.selected_firm.slug == "demo-firm-a"
 assert auth_a.destination_e164 == "+12676804795"
 assert result_b.selected_firm.slug == "demo-firm-b"
-assert auth_b.destination_e164 == "+16173187562"
+assert auth_b.destination_e164 == "+12676804795"
 ```
 
 Search the repository during CI or a dedicated test for prohibited telecom dependencies:
@@ -1423,7 +1423,7 @@ Expected terminal output must clearly show:
 
 ```text
 firm-a -> Demo Partner Firm A -> +12676804795 -> MOCK TRANSFER ONLY
-firm-b -> Demo Partner Firm B -> +16173187562 -> MOCK TRANSFER ONLY
+firm-b -> Demo Partner Firm B -> +12676804795 -> MOCK TRANSFER ONLY
 after-hours -> no live transfer -> extended intake/referral path
 ```
 
@@ -1478,11 +1478,11 @@ Before setting live flags:
 4. Confirm `GUAVA_MODE=live` only in the intended staging/demo secret configuration.
 5. Confirm `DEMO_MODE=true`.
 6. Confirm `DEMO_LIVE_TRANSFER_ENABLED=true`.
-7. Confirm allowlist is exactly `+12676804795,+16173187562`.
+7. Confirm allowlist is exactly `+12676804795`.
 8. Confirm no real caller information is used; use fictional demo facts.
 9. Call the CaseLine Guava number **484-968-7497 (`+14849687497`)** manually.
 10. Run scenario A and verify the agent names `Demo Partner Firm A`, asks permission, then transfers to **267-680-4795**.
-11. Reset the demo call and run scenario B; verify it names `Demo Partner Firm B`, asks permission, then transfers to **617-318-7562**.
+11. Reset the demo call and run scenario B; verify it names `Demo Partner Firm B`, asks permission, then transfers to **267-680-4795**.
 12. Test caller refusal: the system must not dial.
 13. Test simulated closed status: the system must not dial and must continue extended intake.
 14. After the demo, set `DEMO_LIVE_TRANSFER_ENABLED=false` again.
@@ -1530,7 +1530,7 @@ The GitHub implementation is not complete until all of the following are true:
 - [ ] API starts and both health endpoints pass.
 - [ ] All tests pass locally and in GitHub Actions.
 - [ ] Scenario A resolves to `+12676804795` only after consent/authorization.
-- [ ] Scenario B resolves to `+16173187562` only after consent/authorization.
+- [ ] Scenario B resolves to `+12676804795` only after consent/authorization.
 - [ ] No response exposes an unrestricted dial target before consent.
 - [ ] Live transfer is disabled by default.
 - [ ] CI can never make a real Guava call or send a Guava SMS.
@@ -1563,7 +1563,7 @@ Public Guava documentation checked on **2026-09-26** shows Windows CLI installat
 
 ```text
 DEMO_AREA_A -> Demo Partner Firm A -> authorized destination +12676804795
-DEMO_AREA_B -> Demo Partner Firm B -> authorized destination +16173187562
+DEMO_AREA_B -> Demo Partner Firm B -> authorized destination +12676804795
 ```
 
 with **no real dialing in tests/CI** and with both phone numbers hidden until the backend has stored caller transfer consent and issued a short-lived authorization. Only after that milestone should the agent wire the live Guava `call.transfer(...)` path, leaving the real demo disabled by default for manual supervised activation.
